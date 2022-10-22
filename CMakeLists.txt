@@ -62,23 +62,25 @@ if(CMAKE_SIZEOF_VOID_P EQUAL 8)
 	else()
 		set(ARCH_NAME "32bit")
 		set(OBS_BUILDDIR_ARCH "build32")
-	endif()
+endif()
 
   # pre build events, build libwebrtc.dll & copy it to this project
+  set(LIBWEBRTC_BUILD_SCRIPT_DIR "${LIBWEBRTCDIR}/libwebrtc/scripts")  
   add_custom_command(TARGET janus-videoroom PRE_BUILD
-		COMMAND cmd /c \"${CMAKE_CURRENT_SOURCE_DIR}/deps/libwebrtc/scripts/$<CONFIG>/build-libwebrtc.bat\" "${CMAKE_CURRENT_SOURCE_DIR}/deps/libwebrtc"
+		COMMAND cmd /c \"${CMAKE_CURRENT_SOURCE_DIR}/deps/libwebrtc/scripts/build-libwebrtc.bat\" "${LIBWEBRTC_BUILD_SCRIPT_DIR}" "$<CONFIG>" "${CMAKE_CURRENT_SOURCE_DIR}/deps/libwebrtc"
 	)
 
   # post build events, copy libwebrtc.dll to obs bin directory
+  set(OBS_BIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../${OBS_BUILDDIR_ARCH}/rundir/$<CONFIG>/bin/${ARCH_NAME}")
 	add_custom_command(TARGET janus-videoroom POST_BUILD
     COMMAND if $<CONFIG:Debug>==1 (
-			"${CMAKE_COMMAND}" -E copy "${CMAKE_CURRENT_SOURCE_DIR}/deps/libwebrtc/lib/$<CONFIG>/libwebrtc.dll" "${CMAKE_CURRENT_SOURCE_DIR}/../../${OBS_BUILDDIR_ARCH}/rundir/$<CONFIG>/bin/${ARCH_NAME}"
+			"${CMAKE_COMMAND}" -E copy "${CMAKE_CURRENT_SOURCE_DIR}/deps/libwebrtc/lib/$<CONFIG>/libwebrtc.dll" "${OBS_BIN_DIR}"
 		)
     COMMAND if $<CONFIG:Debug>==1 (
-      "${CMAKE_COMMAND}" -E copy "${CMAKE_CURRENT_SOURCE_DIR}/deps/libwebrtc/lib/$<CONFIG>/libwebrtc.dll.pdb" "${CMAKE_CURRENT_SOURCE_DIR}/../../${OBS_BUILDDIR_ARCH}/rundir/$<CONFIG>/bin/${ARCH_NAME}"
+      "${CMAKE_COMMAND}" -E copy "${CMAKE_CURRENT_SOURCE_DIR}/deps/libwebrtc/lib/$<CONFIG>/libwebrtc.dll.pdb" "${OBS_BIN_DIR}"
 		)
     COMMAND if $<CONFIG:Release>==1 (
-			"${CMAKE_COMMAND}" -E copy "${CMAKE_CURRENT_SOURCE_DIR}/deps/libwebrtc/lib/$<CONFIG>/libwebrtc.dll" "${CMAKE_CURRENT_SOURCE_DIR}/../../${OBS_BUILDDIR_ARCH}/rundir/$<CONFIG>/bin/${ARCH_NAME}"
+			"${CMAKE_COMMAND}" -E copy "${CMAKE_CURRENT_SOURCE_DIR}/deps/libwebrtc/lib/$<CONFIG>/libwebrtc.dll" "${OBS_BIN_DIR}"
 		)
 	)
 
