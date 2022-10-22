@@ -15,9 +15,6 @@ if(NOT
   obs_status(FATAL_ERROR "janus-videoroom submodule deps not available.")
 endif()
 
-# Plugin tests flag
-option(PLUGIN_TESTS "Enable plugin runtime tests" OFF)
-
 # # Find nlohmann
 # set(JSON_BuildTests
 #     OFF
@@ -39,30 +36,49 @@ target_sources(
 
 target_include_directories(
   janus-videoroom
-  PRIVATE "deps/asio/asio/include" "deps/websocketpp")
+  PRIVATE "deps/asio/asio/include" "deps/websocketpp"
+  "${LIBWEBRTCDIR}/libwebrtc/include"
+  )
 
 target_link_libraries(
   janus-videoroom
   PRIVATE OBS::libobs
           OBS::frontend-api
+          "${CMAKE_CURRENT_SOURCE_DIR}/deps/libwebrtc/lib/$<CONFIG>/libwebrtc.dll.lib"
           nlohmann_json::nlohmann_json)
 
 target_compile_features(janus-videoroom PRIVATE cxx_std_17)
 
 set_target_properties(janus-videoroom PROPERTIES FOLDER "plugins/janus-videoroom")
 
-if(PLUGIN_TESTS)
-  target_compile_definitions(janus-videoroom PRIVATE PLUGIN_TESTS)
-endif()
+add_definitions(-D_WEBSOCKETPP_CPP11_STL_)
+target_compile_options(janus-videoroom PRIVATE /wd4267 /wd4996)
 
-# Random other things
-if(WIN32)
-  add_definitions(-D_WEBSOCKETPP_CPP11_STL_)
-endif()
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+		set(ARCH_NAME "64bit")
+		set(OBS_BUILDDIR_ARCH "build64")
+	else()
+		set(ARCH_NAME "32bit")
+		set(OBS_BUILDDIR_ARCH "build32")
+	endif()
 
-if(MSVC)
-  target_compile_options(janus-videoroom PRIVATE /wd4267 /wd4996)
-endif()
+  # pre build events, build libwebrtc.dll & copy it to this project
+  add_custom_command(TARGET janus-videoroom PRE_BUILD
+		COMMAND cmd /c \"${CMAKE_CURRENT_SOURCE_DIR}/deps/libwebrtc/scripts/$<CONFIG>/build-libwebrtc.bat\" "${CMAKE_CURRENT_SOURCE_DIR}/deps/libwebrtc"
+	)
+
+  # post build events, copy libwebrtc.dll to obs bin directory
+	add_custom_command(TARGET janus-videoroom POST_BUILD
+    COMMAND if $<CONFIG:Debug>==1 (
+			"${CMAKE_COMMAND}" -E copy "${CMAKE_CURRENT_SOURCE_DIR}/deps/libwebrtc/lib/$<CONFIG>/libwebrtc.dll" "${CMAKE_CURRENT_SOURCE_DIR}/../../${OBS_BUILDDIR_ARCH}/rundir/$<CONFIG>/bin/${ARCH_NAME}"
+		)
+    COMMAND if $<CONFIG:Debug>==1 (
+      "${CMAKE_COMMAND}" -E copy "${CMAKE_CURRENT_SOURCE_DIR}/deps/libwebrtc/lib/$<CONFIG>/libwebrtc.dll.pdb" "${CMAKE_CURRENT_SOURCE_DIR}/../../${OBS_BUILDDIR_ARCH}/rundir/$<CONFIG>/bin/${ARCH_NAME}"
+		)
+    COMMAND if $<CONFIG:Release>==1 (
+			"${CMAKE_COMMAND}" -E copy "${CMAKE_CURRENT_SOURCE_DIR}/deps/libwebrtc/lib/$<CONFIG>/libwebrtc.dll" "${CMAKE_CURRENT_SOURCE_DIR}/../../${OBS_BUILDDIR_ARCH}/rundir/$<CONFIG>/bin/${ARCH_NAME}"
+		)
+	)
 
 # Final CMake helpers
 setup_plugin_target(janus-videoroom)
