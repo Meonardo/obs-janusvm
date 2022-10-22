@@ -32,6 +32,8 @@ target_sources(
   janus-videoroom
   PRIVATE src/janus-videoroom.cpp
           src/janus-videoroom.h
+          src/rtc_client.cpp
+          src/rtc_client.h
           )
 
 target_include_directories(
