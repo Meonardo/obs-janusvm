@@ -30,7 +30,7 @@ add_library(OBS::janus ALIAS janus-videoroom)
 
 target_sources(
   janus-videoroom
-  PRIVATE src/janus-videoroom.cpp
+  PRIVATE src/janus-videoroom.c
           src/janus-videoroom.h
           src/rtc_client.cpp
           src/rtc_client.h
