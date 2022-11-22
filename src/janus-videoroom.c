@@ -27,7 +27,7 @@ bool obs_module_load(void)
 {
 	// register output
 	obs_register_output(&janus_output);
-	// Initialize the cpu stats
+	// initialize the cpu stats
 	_cpuUsageInfo = os_cpu_usage_info_start();
 
 	blog(LOG_INFO, "[obs_module_load] Module loaded.");
@@ -38,7 +38,7 @@ void obs_module_unload()
 {
 	blog(LOG_INFO, "[obs_module_unload] Shutting down...");
 
-	// Destroy the cpu stats
+	// destroy the cpu stats
 	os_cpu_usage_info_destroy(_cpuUsageInfo);
 
 	blog(LOG_INFO, "[obs_module_unload] Finished shutting down.");
@@ -58,6 +58,29 @@ static void janus_output_full_stop(void *data);
 static void janus_deactivate(struct janus_output *output);
 static void *write_thread(void *data);
 static void *start_thread(void *data);
+
+// data init & deinit
+bool janus_data_init(struct janus_data *data, struct janus_cfg *config)
+{
+	memset(data, 0, sizeof(struct janus_data));
+	data->config = *config;
+	data->num_audio_streams = config->audio_mix_count;
+	data->audio_tracks = config->audio_tracks;
+	if (!config->url || !*config->url)
+		return false;
+
+	data->initialized = true;
+	return true;
+}
+
+void janus_data_free(struct janus_data *data)
+{
+	if (data->last_error)
+		bfree(data->last_error);
+
+	memset(data, 0, sizeof(struct janus_data));
+}
+// end data init & deinit
 
 static inline const char *get_string_or_null(obs_data_t *settings,
 					     const char *name)
@@ -89,26 +112,16 @@ static const char *janus_output_getname(void *unused)
 static void *janus_output_create(obs_data_t *settings, obs_output_t *output)
 {
 	struct janus_output *data = bzalloc(sizeof(struct janus_output));
-	pthread_mutex_init_value(&data->write_mutex);
 	data->output = output;
 
-	if (pthread_mutex_init(&data->write_mutex, NULL) != 0)
-		goto fail;
-	if (os_event_init(&data->stop_event, OS_EVENT_TYPE_AUTO) != 0)
-		goto fail;
-	if (os_sem_init(&data->write_sem, 0) != 0)
-		goto fail;
-
-	//av_log_set_callback(ffmpeg_log_callback);
+	if (os_event_init(&data->stop_event, OS_EVENT_TYPE_AUTO) != 0) {
+		os_event_destroy(data->stop_event);
+		bfree(data);
+		return NULL;
+	}
 
 	UNUSED_PARAMETER(settings);
 	return data;
-
-fail:
-	pthread_mutex_destroy(&data->write_mutex);
-	os_event_destroy(data->stop_event);
-	bfree(data);
-	return NULL;
 }
 
 static bool janus_output_start(void *data)
@@ -125,6 +138,7 @@ static bool janus_output_start(void *data)
 	output->total_bytes = 0;
 
 	ret = pthread_create(&output->start_thread, NULL, start_thread, output);
+
 	return (output->connecting = (ret == 0));
 }
 
@@ -138,8 +152,6 @@ static void janus_output_destroy(void *data)
 
 		janus_output_full_stop(output);
 
-		pthread_mutex_destroy(&output->write_mutex);
-		os_sem_destroy(output->write_sem);
 		os_event_destroy(output->stop_event);
 		bfree(data);
 	}
@@ -171,21 +183,6 @@ static void janus_output_stop(void *data, uint64_t ts)
 
 static void janus_deactivate(struct janus_output *output)
 {
-	if (output->write_thread_active) {
-		os_event_signal(output->stop_event);
-		os_sem_post(output->write_sem);
-		pthread_join(output->write_thread, NULL);
-		output->write_thread_active = false;
-	}
-
-	pthread_mutex_lock(&output->write_mutex);
-
-	/*for (size_t i = 0; i < output->packets.num; i++)
-		av_packet_free(output->packets.array + i);
-	da_free(output->packets);*/
-
-	pthread_mutex_unlock(&output->write_mutex);
-
 	janus_data_free(&output->js_data);
 }
 
@@ -197,24 +194,24 @@ static uint64_t janus_output_total_bytes(void *data)
 
 static bool try_connect(struct janus_output *output)
 {
-	video_t *video = obs_output_video(output->output);
-	const struct video_output_info *voi = video_output_get_info(video);
-	struct janus_cfg config;
-	obs_data_t *settings;
+	struct janus_cfg config = {0};
 	bool success;
-	int ret;
 
-	settings = obs_output_get_settings(output->output);
-
+	// get settings from fronted api
+	// janus configs
+	obs_data_t *settings = obs_output_get_settings(output->output);
 	config.url = obs_data_get_string(settings, "url");
 	config.display = get_string_or_null(settings, "display");
 	config.room = (uint64_t)obs_data_get_int(settings, "room");
+	config.pin = get_string_or_null(settings, "pin");
+
+	// a/v configs
 	config.width = (int)obs_output_get_width(output->output);
 	config.height = (int)obs_output_get_height(output->output);
-
 	config.audio_tracks = (int)obs_output_get_mixers(output->output);
 	config.audio_mix_count = get_audio_mix_count(config.audio_tracks);
 
+	// init struct `janus_data`
 	success = janus_data_init(&output->js_data, &config);
 	obs_data_release(settings);
 
@@ -227,128 +224,59 @@ static bool try_connect(struct janus_output *output)
 		return false;
 	}
 
-	struct audio_convert_info aci = {
-		.format = output->js_data.audio_format,
-	};
-
+	// set the output is active!
 	output->active = true;
 
 	if (!obs_output_can_begin_data_capture(output->output, 0))
 		return false;
-
-	ret = pthread_create(&output->write_thread, NULL, write_thread, output);
-	if (ret != 0) {
-		blog(LOG_WARNING,
-		     "janus_output_start: failed to create write thread.");
-		janus_output_full_stop(output);
-		return false;
-	}
-
-	obs_output_set_video_conversion(output->output, NULL);
-	obs_output_set_audio_conversion(output->output, &aci);
+	// begin capture
 	obs_output_begin_data_capture(output->output, 0);
-	output->write_thread_active = true;
+	// will call `obs_output_end_data_capture()` in `janus_output_full_stop()`
+
 	return true;
-}
-
-static void *write_thread(void *data)
-{
-	struct janus_output *output = data;
-
-	while (os_sem_wait(output->write_sem) == 0) {
-		/* check to see if shutting down */
-		if (os_event_try(output->stop_event) == 0)
-			break;
-
-		////////// TODO!!!
-	}
-
-	output->active = false;
-	return NULL;
 }
 
 static void *start_thread(void *data)
 {
 	struct janus_output *output = data;
 
+	// get janus configs & connect to janus ws server
 	if (!try_connect(output))
 		obs_output_signal_stop(output->output,
 				       OBS_OUTPUT_CONNECT_FAILED);
 
+	// set connecting 
 	output->connecting = false;
+
+	// set thread name
+	os_set_thread_name("janus-output-thread");
+
 	return NULL;
 }
 
-/* Given a bitmask for the selected tracks and the mix index,
- * this returns the stream index which will be passed to the muxer. */
-static int get_track_order(int track_config, size_t mix_index)
-{
-	int position = 0;
-	for (size_t i = 0; i < mix_index; i++) {
-		if (track_config & 1 << i)
-			position++;
-	}
-	return position;
-}
-
-static void receive_audio(void *param, size_t mix_idx, struct audio_data *frame)
+// audio callback from obs
+static void receive_audio(void *param, struct audio_data *frame)
 {
 	struct janus_output *output = param;
 	struct janus_data *data = &output->js_data;
-	//size_t frame_size_bytes;
-	struct audio_data in = *frame;
-	int track_order;
-
-	/* check that the track was selected */
-	if ((data->audio_tracks & (1 << mix_idx)) == 0)
-		return;
-
-	/* get track order (first selected, etc ...) */
-	track_order = get_track_order(data->audio_tracks, mix_idx);
 }
 
+// video callback from obs
 static void receive_video(void *param, struct video_data *frame)
 {
 	struct janus_output *output = param;
 	struct janus_data *data = &output->js_data;
-
-	// codec doesn't support video or none configured
-	/*if (!data->video)
-		return;*/
-}
-
-bool janus_data_init(struct janus_data *data, struct janus_cfg *config)
-{
-	bool is_rtmp = false;
-
-	memset(data, 0, sizeof(struct janus_data));
-	data->config = *config;
-	data->num_audio_streams = config->audio_mix_count;
-	data->audio_tracks = config->audio_tracks;
-	if (!config->url || !*config->url)
-		return false;
-
-	data->initialized = true;
-	return true;
-}
-
-void janus_data_free(struct janus_data *data)
-{
-	if (data->last_error)
-		bfree(data->last_error);
-
-	memset(data, 0, sizeof(struct janus_data));
 }
 
 struct obs_output_info janus_output = {
 	.id = "janus_output",
-	.flags = OBS_OUTPUT_AUDIO | OBS_OUTPUT_VIDEO | OBS_OUTPUT_MULTI_TRACK,
+	.flags = OBS_OUTPUT_AV,
 	.get_name = janus_output_getname,
 	.create = janus_output_create,
 	.destroy = janus_output_destroy,
 	.start = janus_output_start,
 	.stop = janus_output_stop,
 	.raw_video = receive_video,
-	.raw_audio2 = receive_audio,
+	.raw_audio = receive_audio,
 	.get_total_bytes = janus_output_total_bytes,
 };
