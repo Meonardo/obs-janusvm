@@ -3,95 +3,183 @@
 #include "libwebrtc.h"
 #include "rtc_peerconnection.h"
 
-using namespace libwebrtc;
-
 namespace libwebrtc {
 class RTCPeerConnectionFactory;
 class RTCVideoCapturer;
-}  // namespace libwebrtc
+} // namespace libwebrtc
 
-typedef void(__stdcall* StringCallback)(const char* content, const char* error);
-typedef void(__stdcall* ErrorCallback)(const char* error);
-typedef void(__stdcall* EventEnumCallback)(int type, int value);
-typedef void(__stdcall* IceCandidateCallback)(const char* sdp,
-                                              const char* mid,
-                                              int mline_index);
-typedef void(__stdcall* MediaTrackUpdateCallback)(int type, int state);
-
-class RTCClient : public RTCPeerConnectionObserver {
- public:
-  enum ClientEventsType {
-    SignalingState = 0,
-    PeerConnectionState,
-    IceGatheringState,
-    IceConnectionState,
-  };
-
-  RTCClient(scoped_refptr<RTCPeerConnectionFactory> pcf,
-            const RTCConfiguration& configuration,
-            scoped_refptr<RTCMediaConstraints> constraints);
-  ~RTCClient();
-
-  scoped_refptr<RTCVideoTrack> local_video_track_;
-  scoped_refptr<RTCAudioTrack> audio_track_;
-  scoped_refptr<RTCVideoTrack> remote_video_track_;
-
-  void Close();
-
-  // SDP
-  void CreateOffer(StringCallback sdp);
-  void CreateAnswer(StringCallback sdp);
-  void SetLocalDescription(const char* sdp, const char* type, ErrorCallback cb);
-  void SetRemoteDescription(const char* sdp,
-                            const char* type,
-                            ErrorCallback cb);
-  void GetLocalDescription(StringCallback cb);
-  void GetRemoteDescription(StringCallback cb);
-
-  // Candidate
-  void AddCandidate(const char* mid,
-                    int mid_mline_index,
-                    const char* candidate);
-
-  // Media
-  bool ToggleMute(bool mute);
-
-  // Renderer
-  void AttachVideoRenderer(
-      RTCVideoRenderer<scoped_refptr<RTCVideoFrame>>* renderer,
-      bool local);
-  void DetachVideoRenderer(
-      RTCVideoRenderer<scoped_refptr<RTCVideoFrame>>* renderer,
-      bool local);
-
-  // PC Observer & callback
-  void AddPeerconnectionEventsObserver(EventEnumCallback cb);
-  void AddIceCandidateObserver(IceCandidateCallback cb);
-  void AddMediaTrackUpdateObserver(MediaTrackUpdateCallback cb);
-
-  virtual void OnSignalingState(RTCSignalingState state) override;
-  virtual void OnPeerConnectionState(RTCPeerConnectionState state) override;
-  virtual void OnIceGatheringState(RTCIceGatheringState state) override;
-  virtual void OnIceConnectionState(RTCIceConnectionState state) override;
-  virtual void OnIceCandidate(
-      scoped_refptr<RTCIceCandidate> candidate) override;
-  virtual void OnAddStream(scoped_refptr<RTCMediaStream> stream) override;
-  virtual void OnRemoveStream(scoped_refptr<RTCMediaStream> stream) override;
-  virtual void OnDataChannel(
-      scoped_refptr<RTCDataChannel> data_channel) override;
-  virtual void OnRenegotiationNeeded() override;
-  virtual void OnTrack(scoped_refptr<RTCRtpTransceiver> transceiver) override;
-  virtual void OnAddTrack(vector<scoped_refptr<RTCMediaStream>> streams,
-                          scoped_refptr<RTCRtpReceiver> receiver) override;
-  virtual void OnRemoveTrack(scoped_refptr<RTCRtpReceiver> receiver) override;
-
- private:
-  scoped_refptr<RTCPeerConnectionFactory> pcf_;
-  scoped_refptr<RTCPeerConnection> pc_;
-  std::string selected_mic_name_ = "";
-
-  EventEnumCallback events_cb_;
-  IceCandidateCallback ice_candidate_cb_;
-  MediaTrackUpdateCallback media_track_update_cb_;
+namespace janus::rtc {
+struct RTCSessionDescription {
+	std::string sdp;
+	std::string type;
 };
 
+struct RTCIceCandidate {
+	std::string sdp;
+	int sdp_mline_index;
+	std::string sdp_mid;
+};
+
+enum RTCLogLevel { kVebose = 0, kDebug, kInfo, kError, kNone };
+
+} // namespace miracast::rtc
+
+////////////////////////////////////////////////////////////////////////////////
+// typedefs
+typedef void(__stdcall *OnCreatedSdpCallback)(
+	janus::rtc::RTCSessionDescription &sdp, std::string &error,
+	void *params);
+typedef void(__stdcall *OnCreatedIceCandidateCallback)(
+	janus::rtc::RTCIceCandidate &candidate, std::string &error,
+	void *params);
+typedef void(__stdcall *ErrorCallback)(std::string &error, void *params);
+
+typedef libwebrtc::RTCVideoRenderer<
+	libwebrtc::scoped_refptr<libwebrtc::RTCVideoFrame>> *RTCVideoRendererPtr;
+// end of typedefs
+////////////////////////////////////////////////////////////////////////////////
+
+namespace janus::rtc {
+enum RTCMediaType {
+	kVideo = 0,
+	kAudio,
+	kData,
+};
+
+enum RTCMediaUpdate {
+	kRemoved = 0,
+	kAdded,
+};
+
+class RTCClientIceCandidateObserver {
+public:
+	virtual void OnIceCandidateDiscoveried(std::string &id,
+					       RTCIceCandidate &candidate) = 0;
+};
+
+class RTCClientConnectionObserver {
+public:
+	virtual void OnSignalingState(std::string &id,
+				      libwebrtc::RTCSignalingState state) = 0;
+	virtual void
+	OnPeerConnectionState(std::string &id,
+			      libwebrtc::RTCPeerConnectionState state) = 0;
+	virtual void
+	OnIceGatheringState(std::string &id,
+			    libwebrtc::RTCIceGatheringState state) = 0;
+	virtual void
+	OnIceConnectionState(std::string &id,
+			     libwebrtc::RTCIceConnectionState state) = 0;
+};
+
+class RTCClientMediaTrackEventObserver {
+public:
+	virtual void OnMediaTrackChanged(std::string &id, RTCMediaType type,
+					 RTCMediaUpdate state) = 0;
+};
+
+class RTCClient : public libwebrtc::RTCPeerConnectionObserver {
+public:
+	explicit RTCClient(
+		std::string id,
+		libwebrtc::scoped_refptr<libwebrtc::RTCPeerConnectionFactory>
+			pcf,
+		const libwebrtc::RTCConfiguration &configuration,
+		libwebrtc::scoped_refptr<libwebrtc::RTCMediaConstraints>
+			constraints);
+	~RTCClient();
+
+	// ID
+	std::string ID() const;
+
+	// Close RTCConnection, destory any media sources
+	void Close();
+
+	// SDP
+	void CreateOffer(void *params, OnCreatedSdpCallback callback);
+	void CreateAnswer(void *params, OnCreatedSdpCallback callback);
+	void SetLocalDescription(const char *sdp, const char *type,
+				 void *params, ErrorCallback callback);
+	void SetRemoteDescription(const char *sdp, const char *type,
+				  void *params, ErrorCallback cb);
+	void GetLocalDescription(void *params, OnCreatedSdpCallback cb);
+	void GetRemoteDescription(void *params, OnCreatedSdpCallback cb);
+
+	// ICE
+	void AddCandidate(const char *mid, int mid_mline_index,
+			  const char *candidate);
+
+	// Media
+	bool ToggleMute(bool mute);
+
+	// PC Observer & callback
+	void AddPeerconnectionEventsObserver(RTCClientConnectionObserver *cb);
+	void AddIceCandidateObserver(RTCClientIceCandidateObserver *cb);
+	void AddMediaTrackUpdateObserver(RTCClientMediaTrackEventObserver *cb);
+
+	virtual void
+	OnSignalingState(libwebrtc::RTCSignalingState state) override;
+	virtual void
+	OnPeerConnectionState(libwebrtc::RTCPeerConnectionState state) override;
+	virtual void
+	OnIceGatheringState(libwebrtc::RTCIceGatheringState state) override;
+	virtual void
+	OnIceConnectionState(libwebrtc::RTCIceConnectionState state) override;
+	virtual void OnIceCandidate(
+		libwebrtc::scoped_refptr<libwebrtc::RTCIceCandidate> candidate)
+		override;
+	virtual void
+	OnAddStream(libwebrtc::scoped_refptr<libwebrtc::RTCMediaStream> stream)
+		override;
+	virtual void OnRemoveStream(
+		libwebrtc::scoped_refptr<libwebrtc::RTCMediaStream> stream)
+		override;
+	virtual void
+	OnDataChannel(libwebrtc::scoped_refptr<libwebrtc::RTCDataChannel>
+			      data_channel) override;
+	virtual void OnRenegotiationNeeded() override;
+	virtual void
+	OnTrack(libwebrtc::scoped_refptr<libwebrtc::RTCRtpTransceiver>
+			transceiver) override;
+	virtual void
+	OnAddTrack(libwebrtc::vector<
+			   libwebrtc::scoped_refptr<libwebrtc::RTCMediaStream>>
+			   streams,
+		   libwebrtc::scoped_refptr<libwebrtc::RTCRtpReceiver> receiver)
+		override;
+	virtual void OnRemoveTrack(
+		libwebrtc::scoped_refptr<libwebrtc::RTCRtpReceiver> receiver)
+		override;
+
+private:
+	std::string id_;
+	libwebrtc::scoped_refptr<libwebrtc::RTCVideoTrack> local_video_track_;
+	libwebrtc::scoped_refptr<libwebrtc::RTCAudioTrack> audio_track_;
+	libwebrtc::scoped_refptr<libwebrtc::RTCVideoTrack> remote_video_track_;
+	libwebrtc::scoped_refptr<libwebrtc::RTCPeerConnectionFactory> pcf_;
+	libwebrtc::scoped_refptr<libwebrtc::RTCPeerConnection> pc_;
+
+	// Observers
+	RTCClientConnectionObserver *events_cb_;
+	RTCClientIceCandidateObserver *ice_candidate_cb_;
+	RTCClientMediaTrackEventObserver *media_track_update_cb_;
+};
+
+//////////////////////////////////////////////////////////////////////////////////////////
+// static methods
+
+// Update RTC log level
+// 0 vebose
+// 1
+void UpdateRTCLogLevel(janus::rtc::RTCLogLevel level);
+// Enable intel media sdk hw acc for
+void SetVideoHardwareAccelerationEnabled(bool enable);
+// Create RTCClient
+RTCClient *CreateClient(
+	std::vector<std::unordered_map<std::string, std::string>> &iceServers,
+	std::string id);
+
+// end of static methods
+//////////////////////////////////////////////////////////////////////////////////////////
+
+} // namespace miracast::rtc

@@ -2,6 +2,7 @@
 
 #include <obs-module.h>
 #include <util/platform.h>
+#include <util/threading.h>
 
 #define blog(level, msg, ...) \
 	blog(level, "[janus-videoroom] " msg, ##__VA_ARGS__)
@@ -30,7 +31,7 @@ struct janus_data {
 	uint64_t start_timestamp;
 
 	// audio info
- 	int audio_tracks;
+	int audio_tracks;
 	int num_audio_streams;
 
 	struct janus_cfg config;

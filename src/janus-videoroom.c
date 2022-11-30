@@ -1,5 +1,4 @@
 #include <util/circlebuf.h>
-#include <util/threading.h>
 #include <util/dstr.h>
 #include <util/darray.h>
 #include <util/platform.h>
