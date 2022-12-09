@@ -1,4 +1,4 @@
-#include "rtc_client.h"
+#include "rtc-client.h"
 #include "rtc_audio_device.h"
 #include "rtc_audio_source.h"
 #include "rtc_desktop_device.h"
