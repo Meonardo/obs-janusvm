@@ -32,10 +32,14 @@ target_sources(
   janus-videoroom
   PRIVATE src/janus-videoroom.c
           src/janus-videoroom.h
-          src/rtc-client.cpp
-          src/rtc-client.h
-          src/websocket-client.cpp
-          src/websocket-client.h
+          src/rtc_client.cpp
+          src/rtc_client.h
+          src/websocket_client.cpp
+          src/websocket_client.h
+          src/janus_connection.cpp
+          src/janus_connection.h
+          src/janus_connection_api.cpp
+          src/janus_connection_api.h
           )
 
 target_include_directories(

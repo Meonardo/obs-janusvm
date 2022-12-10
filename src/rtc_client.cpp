@@ -1,8 +1,9 @@
-#include "rtc-client.h"
+#include "rtc_client.h"
 #include "rtc_audio_device.h"
 #include "rtc_audio_source.h"
 #include "rtc_desktop_device.h"
 #include "rtc_peerconnection_factory.h"
+
 #include "janus-videoroom.h"
 
 using namespace libwebrtc;
@@ -233,6 +234,18 @@ bool RTCClient::ToggleMute(bool mute)
 		return false;
 
 	return audio_track_->set_enabled(!mute);
+}
+
+void RTCClient::CreateMediaSender(
+	std::unique_ptr<owt::base::VideoFrameGeneratorInterface> video)
+{
+	string video_label("accrtc_video");
+	local_video_track_ = pcf_->CreateVideoTrack(std::move(video), video_label);
+
+	scoped_refptr<RTCMediaStream> stream = pcf_->CreateStream("obs-rtc");
+	if (local_video_track_)
+		stream->AddTrack(local_video_track_);
+	pc_->AddStream(stream);
 }
 
 void RTCClient::OnSignalingState(RTCSignalingState state)

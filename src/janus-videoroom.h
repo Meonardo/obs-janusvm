@@ -46,6 +46,7 @@ struct janus_output {
 	obs_output_t *output;
 
 	struct janus_data js_data;
+	void *janus_conn;
 
 	bool connecting;
 	volatile bool active;

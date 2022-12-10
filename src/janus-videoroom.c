@@ -1,9 +1,9 @@
 #include <util/circlebuf.h>
 #include <util/dstr.h>
 #include <util/darray.h>
-#include <util/platform.h>
 
 #include "janus-videoroom.h"
+#include "janus_connection_api.h"
 
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE("janus-videoroom", "en-US")
@@ -30,6 +30,7 @@ bool obs_module_load(void)
 	_cpuUsageInfo = os_cpu_usage_info_start();
 
 	blog(LOG_INFO, "[obs_module_load] Module loaded.");
+
 	return true;
 }
 
@@ -112,6 +113,7 @@ static void *janus_output_create(obs_data_t *settings, obs_output_t *output)
 {
 	struct janus_output *data = bzalloc(sizeof(struct janus_output));
 	data->output = output;
+	data->janus_conn = NULL;
 
 	if (os_event_init(&data->stop_event, OS_EVENT_TYPE_AUTO) != 0) {
 		os_event_destroy(data->stop_event);
@@ -136,6 +138,9 @@ static bool janus_output_start(void *data)
 	output->video_start_ts = 0;
 	output->total_bytes = 0;
 
+	// here create janus connection instance
+	output->janus_conn = CreateConncetion();
+
 	ret = pthread_create(&output->start_thread, NULL, start_thread, output);
 
 	return (output->connecting = (ret == 0));
@@ -148,6 +153,11 @@ static void janus_output_destroy(void *data)
 	if (output) {
 		if (output->connecting)
 			pthread_join(output->start_thread, NULL);
+
+		if (output->janus_conn != NULL) {
+			DestoryConnection(output->janus_conn);
+			output->janus_conn = NULL;
+		}
 
 		janus_output_full_stop(output);
 
@@ -169,6 +179,12 @@ static void janus_output_full_stop(void *data)
 static void janus_output_stop(void *data, uint64_t ts)
 {
 	struct janus_output *output = data;
+
+	// try to destory janus connection
+	if (output->janus_conn != NULL) {
+		DestoryConnection(output->janus_conn);
+		output->janus_conn = NULL;
+	}
 
 	if (output->active) {
 		if (ts > 0) {

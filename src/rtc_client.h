@@ -2,6 +2,7 @@
 
 #include "libwebrtc.h"
 #include "rtc_peerconnection.h"
+#include "framegeneratorinterface.h"
 
 namespace libwebrtc {
 class RTCPeerConnectionFactory;
@@ -111,6 +112,7 @@ public:
 
 	// Media
 	bool ToggleMute(bool mute);
+	void CreateMediaSender(std::unique_ptr<owt::base::VideoFrameGeneratorInterface> video);
 
 	// PC Observer & callback
 	void AddPeerconnectionEventsObserver(RTCClientConnectionObserver *cb);
