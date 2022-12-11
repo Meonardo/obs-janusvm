@@ -55,6 +55,8 @@ void WebsocketClient::Connect(const std::string &url)
 
 	try {
 		hdl_ = conn->get_handle();
+		conn->add_subprotocol("janus-protocol");
+
 		conn->set_open_handler(websocketpp::lib::bind(
 			&WebsocketClient::OnConnectionOpen, this));
 		conn->set_close_handler(websocketpp::lib::bind(

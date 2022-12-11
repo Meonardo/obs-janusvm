@@ -115,6 +115,9 @@ static void *janus_output_create(obs_data_t *settings, obs_output_t *output)
 	data->output = output;
 	data->janus_conn = NULL;
 
+	// here create janus connection instance
+	data->janus_conn = CreateConncetion();
+
 	if (os_event_init(&data->stop_event, OS_EVENT_TYPE_AUTO) != 0) {
 		os_event_destroy(data->stop_event);
 		bfree(data);
@@ -137,9 +140,6 @@ static bool janus_output_start(void *data)
 	output->audio_start_ts = 0;
 	output->video_start_ts = 0;
 	output->total_bytes = 0;
-
-	// here create janus connection instance
-	output->janus_conn = CreateConncetion();
 
 	ret = pthread_create(&output->start_thread, NULL, start_thread, output);
 
@@ -180,10 +180,9 @@ static void janus_output_stop(void *data, uint64_t ts)
 {
 	struct janus_output *output = data;
 
-	// try to destory janus connection
+	// Unpublish
 	if (output->janus_conn != NULL) {
-		DestoryConnection(output->janus_conn);
-		output->janus_conn = NULL;
+		Unpublish(output->janus_conn);
 	}
 
 	if (output->active) {
@@ -248,6 +247,13 @@ static bool try_connect(struct janus_output *output)
 	obs_output_begin_data_capture(output->output, 0);
 	// will call `obs_output_end_data_capture()` in `janus_output_full_stop()`
 
+	if (output->janus_conn != NULL) {
+		// start publishing...
+		Publish(output->janus_conn, config.url, 110, config.display,
+			config.room, config.pin);
+		RegisterVideoProvider(output->janus_conn, output);
+	}
+
 	return true;
 }
 
@@ -260,7 +266,7 @@ static void *start_thread(void *data)
 		obs_output_signal_stop(output->output,
 				       OBS_OUTPUT_CONNECT_FAILED);
 
-	// set connecting 
+	// set connecting
 	output->connecting = false;
 
 	// set thread name
@@ -272,15 +278,15 @@ static void *start_thread(void *data)
 // audio callback from obs
 static void receive_audio(void *param, struct audio_data *frame)
 {
-	struct janus_output *output = param;
-	struct janus_data *data = &output->js_data;
+	/*struct janus_output *output = param;
+	struct janus_data *data = &output->js_data;*/
 }
 
 // video callback from obs
 static void receive_video(void *param, struct video_data *frame)
 {
 	struct janus_output *output = param;
-	struct janus_data *data = &output->js_data;
+	output->video_frame = frame;
 }
 
 struct obs_output_info janus_output = {

@@ -61,6 +61,9 @@ set_target_properties(janus-videoroom PROPERTIES FOLDER "plugins/janus-videoroom
 
 add_definitions(-D_WEBSOCKETPP_CPP11_STL_)
 target_compile_options(janus-videoroom PRIVATE /wd4267 /wd4996)
+if (WIN32)
+  target_compile_definitions(janus-videoroom PRIVATE _WIN32_WINNT=0x0601 RTC_DESKTOP_DEVICE=1)
+endif()
 
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
 		set(ARCH_NAME "64bit")
