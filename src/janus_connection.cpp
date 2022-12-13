@@ -1,54 +1,29 @@
 #include "janus_connection.h"
-
 #include "nlohmann/json.hpp"
 
 namespace janus {
 
-VideoFrameGeneratorImpl::VideoFrameGeneratorImpl(MediaProvider *media_provider)
-	: buffer_size_for_a_frame_(0),
-	  media_provider_(media_provider)
+VideoFrameFeederImpl::VideoFrameFeederImpl()
+	: frame_receiver_(nullptr)
 {
 }
-VideoFrameGeneratorImpl::~VideoFrameGeneratorImpl() {}
 
-uint32_t VideoFrameGeneratorImpl::GenerateNextFrame(uint8_t *buffer,
-						    const uint32_t capacity)
+VideoFrameFeederImpl::~VideoFrameFeederImpl() {}
+
+void VideoFrameFeederImpl::FeedVideoFrame(OBSVideoFrame *frame, int width,
+					  int height)
 {
-	auto frame = media_provider_->video_frame;
-	buffer = *(frame->data);
-
-	return 0;
-}
-
-uint32_t VideoFrameGeneratorImpl::GetNextFrameSize()
-{
-	if (buffer_size_for_a_frame_ == 0) {
-		int size = GetWidth() * GetHeight();
-		int qsize = size / 4;
-		buffer_size_for_a_frame_ = size + 2 * qsize;
+	auto v_frame = libwebrtc::RTCVideoFrame::Create(
+		width, height, frame->data[0], frame->data[1]);
+	if (frame_receiver_ != nullptr) {
+		frame_receiver_->OnFrame(v_frame);
 	}
-	return buffer_size_for_a_frame_;
 }
 
-int VideoFrameGeneratorImpl::GetHeight()
+void VideoFrameFeederImpl::SetFrameReceiver(
+	owt::base::VideoFrameReceiverInterface *receiver)
 {
-	return 1080;
-}
-
-int VideoFrameGeneratorImpl::GetWidth()
-{
-	return 1920;
-}
-
-int VideoFrameGeneratorImpl::GetFps()
-{
-	return 30;
-}
-
-owt::base::VideoFrameGeneratorInterface::VideoFrameCodec
-VideoFrameGeneratorImpl::GetType()
-{
-	return owt::base::VideoFrameGeneratorInterface::VideoFrameCodec::I420;
+	frame_receiver_ = receiver;
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -59,7 +34,8 @@ JanusConnection::JanusConnection()
 	  video_framer_(nullptr),
 	  room_(0),
 	  session_id_(0),
-	  handle_id_(0)
+	  handle_id_(0),
+	  id_(0)
 {
 }
 
@@ -133,9 +109,8 @@ void JanusConnection::OnRecvMessage(const std::string &msg)
 	}
 }
 
-void JanusConnection::Publish(const char *url, uint32_t id,
-			      const char *display, uint64_t room,
-			      const char *pin)
+void JanusConnection::Publish(const char *url, uint32_t id, const char *display,
+			      uint64_t room, const char *pin)
 {
 	id_ = id;
 	display_ = display;
@@ -210,11 +185,13 @@ rtc::RTCClient *JanusConnection::GetRTCClient() const
 	return rtc_client_;
 }
 
-void JanusConnection::RegisterVideoProvider(MediaProvider *media_provider)
+void JanusConnection::SendVideoFrame(OBSVideoFrame *frame, int width,
+				     int height)
 {
 	if (video_framer_ == nullptr) {
-		video_framer_ = new VideoFrameGeneratorImpl(media_provider);
+		video_framer_ = new VideoFrameFeederImpl();
 	}
+	video_framer_->FeedVideoFrame(frame, width, height);
 }
 
 void JanusConnection::DestoryRTCClient()
@@ -252,12 +229,12 @@ void JanusConnection::CreateOffer()
 
 	// create media sender
 	rtc_client_->CreateMediaSender(
-		std::unique_ptr<VideoFrameGeneratorImpl>(video_framer_));
+		std::unique_ptr<VideoFrameFeederImpl>(video_framer_));
 	// create offer
 	rtc_client_->CreateOffer(this, [](janus::rtc::RTCSessionDescription &sdp,
 					  std::string &error, void *params) {
 		auto self = reinterpret_cast<janus::JanusConnection *>(params);
-		if (self != nullptr && !error.empty()) {
+		if (self != nullptr && error.empty()) {
 			// set local sdp
 			self->GetRTCClient()->SetLocalDescription(
 				sdp.sdp.c_str(), sdp.type.c_str(), NULL, NULL);

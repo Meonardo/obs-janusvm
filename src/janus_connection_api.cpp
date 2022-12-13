@@ -11,54 +11,32 @@ void *CreateConncetion()
 
 void DestoryConnection(void *conn)
 {
-	auto ptr = static_cast<janus::JanusConnection *>(conn);
-	if (ptr != nullptr) {
+	auto janus_conn = static_cast<janus::JanusConnection *>(conn);
+	if (janus_conn != nullptr) {
 		delete conn;
 		conn = nullptr;
 	}
 }
 
-//void Connect(void* conn, const char* url)
-//{
-//	auto ptr = static_cast<janus::JanusConnection *>(conn);
-//	if (ptr != nullptr) {
-//		ptr->Connect(url);
-//	}
-//}
-//
-//void Disconnect(void* conn)
-//{
-//	auto ptr = static_cast<janus::JanusConnection *>(conn);
-//	if (ptr != nullptr) {
-//		ptr->Disconnect();
-//	}
-//}
-
 void Publish(void *conn, const char *url, uint32_t id, const char *display,
 	     uint64_t room,
 	     const char *pin)
 {
-	auto ptr = static_cast<janus::JanusConnection *>(conn);
-	if (ptr != nullptr) {
-		ptr->Publish(url, id, display, room, pin);
-	}
+	auto janus_conn = static_cast<janus::JanusConnection *>(conn);
+	janus_conn->Publish(url, id, display, room, pin);
 }
 
 void Unpublish(void *conn)
 {
-	auto ptr = static_cast<janus::JanusConnection *>(conn);
-	if (ptr != nullptr) {
-		ptr->Unpublish();
-	}
+	auto janus_conn = static_cast<janus::JanusConnection *>(conn);
+	janus_conn->Unpublish();
 }
 
-void RegisterVideoProvider(void *conn, void *media_provider)
+void SendVideoFrame(void *conn, void *video_frame, int width, int height)
 {
-	auto ptr = static_cast<janus::JanusConnection *>(conn);
-	auto provider = static_cast<MediaProvider *>(media_provider);
-	if (ptr != nullptr && provider != nullptr) {
-		ptr->RegisterVideoProvider(provider);
-	}
+	auto janus_conn = reinterpret_cast<janus::JanusConnection *>(conn);
+	auto frame = reinterpret_cast<OBSVideoFrame *>(video_frame);
+	janus_conn->SendVideoFrame(frame, width, height);
 }
 
 #ifdef __cplusplus

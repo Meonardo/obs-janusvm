@@ -251,7 +251,6 @@ static bool try_connect(struct janus_output *output)
 		// start publishing...
 		Publish(output->janus_conn, config.url, 110, config.display,
 			config.room, config.pin);
-		RegisterVideoProvider(output->janus_conn, output);
 	}
 
 	return true;
@@ -286,7 +285,11 @@ static void receive_audio(void *param, struct audio_data *frame)
 static void receive_video(void *param, struct video_data *frame)
 {
 	struct janus_output *output = param;
-	output->video_frame = frame;
+	if (output->janus_conn != NULL) {
+		// send video frame to janus connection
+		SendVideoFrame(output->janus_conn, frame, output->js_data.config.width,
+			       output->js_data.config.height);
+	}
 }
 
 struct obs_output_info janus_output = {

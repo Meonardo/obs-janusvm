@@ -62,8 +62,6 @@ struct janus_output {
 	uint64_t audio_start_ts;
 	uint64_t video_start_ts;
 	uint64_t stop_ts;
-
-	struct video_data *video_frame;
 };
 
 // defines please see in the janus-videoroom.c

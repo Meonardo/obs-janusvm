@@ -1,7 +1,6 @@
 #pragma once
 
 #include "websocket_client.h"
-#include <string>
 #include "rtc_client.h"
 #include "framegeneratorinterface.h"
 
@@ -9,29 +8,23 @@
 #include <util/threading.h>
 
 extern "C" {
-#include "janus-videoroom.h"
-typedef struct janus_output MediaProvider;
+#include "media-io/video-frame.h"
+typedef struct video_frame OBSVideoFrame;
 }
 
 namespace janus {
-/// Only I420 raw frame is supported.
-class VideoFrameGeneratorImpl : public owt::base::VideoFrameGeneratorInterface {
+class VideoFrameFeederImpl : public owt::base::VideoFrameFeeder {
 public:
-	VideoFrameGeneratorImpl(MediaProvider *media_provider);
-	~VideoFrameGeneratorImpl();
+	VideoFrameFeederImpl();
+	~VideoFrameFeederImpl();
 
-	virtual uint32_t GenerateNextFrame(uint8_t *buffer,
-					   const uint32_t capacity) override;
-	virtual uint32_t GetNextFrameSize() override;
-	virtual int GetHeight() override;
-	virtual int GetWidth() override;
-	virtual int GetFps() override;
-	virtual owt::base::VideoFrameGeneratorInterface::VideoFrameCodec
-	GetType() override;
+	// tell the framegenerator to store the frame's receiver
+	virtual void SetFrameReceiver(owt::base::VideoFrameReceiverInterface *receiver);
+	// call this function from obs
+	void FeedVideoFrame(OBSVideoFrame *frame, int width, int height);
 
 private:
-	int buffer_size_for_a_frame_;
-	MediaProvider *media_provider_;
+	owt::base::VideoFrameReceiverInterface *frame_receiver_;
 };
 
 class JanusConnection : public signaling::WebsocketClientInterface {
@@ -52,7 +45,8 @@ public:
 
 	rtc::RTCClient *GetRTCClient() const;
 
-	void RegisterVideoProvider(MediaProvider *media_provider);
+	// called from obs output
+	void SendVideoFrame(OBSVideoFrame *frame, int width, int height);
 
 private:
 	uint32_t id_;
@@ -67,7 +61,7 @@ private:
 
 	signaling::WebsocketClient *ws_client_;
 	rtc::RTCClient *rtc_client_;
-	VideoFrameGeneratorImpl *video_framer_;
+	VideoFrameFeederImpl *video_framer_;
 
 	// websocket events
 	void Connect(const char *url);

@@ -35,11 +35,13 @@ void Publish(void *conn, const char *url, uint32_t id, const char *display,
 void Unpublish(void *conn);
 
 /// <summary>
-/// Register audio/video provider for janus 
+/// Send video frame to janus connetion
 /// </summary>
 /// <param name="conn">the `JanusConnection` instance ptr</param>
-/// <param name="provider">the `janus_output` pointer</param>
-void RegisterVideoProvider(void *conn, void *provider);
+/// <param name="video_frame">video frame data in OBS</param>
+/// <param name="width">video frame width</param>
+/// <param name="height">video frame height</param>
+void SendVideoFrame(void *conn, void *video_frame, int width, int height);
 
 #ifdef __cplusplus
 }
