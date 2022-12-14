@@ -29,6 +29,29 @@ void VideoFrameFeederImpl::SetFrameReceiver(
 	frame_receiver_ = receiver;
 }
 
+bool VideoFrameFeederImpl::InitEncoderContext(owt::base::Resolution &resolution, uint32_t fps,
+			uint32_t bitrate_kbps,
+			owt::base::VideoCodec video_codec)
+{ 
+	return true;
+}
+
+bool VideoFrameFeederImpl::EncodeOneFrame(std::vector<uint8_t> &buffer,
+					  bool key_frame)
+{
+	return true;
+}
+
+bool VideoFrameFeederImpl::Release()
+{
+	return true;
+}
+
+owt::base::VideoEncoderInterface *VideoFrameFeederImpl::Copy()
+{
+	return nullptr;
+}
+
 /////////////////////////////////////////////////////////////////////////////////
 
 JanusConnection::JanusConnection()

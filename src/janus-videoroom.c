@@ -277,15 +277,35 @@ static void receive_video(void *param, struct video_data *frame)
 	}
 }
 
+static void receive_encoded_data(void *data, struct encoder_packet *packet)
+{
+	struct janus_output *output = data;
+
+	if (packet->type == OBS_ENCODER_VIDEO) {
+		
+	}
+
+	/*if (packet->type == OBS_ENCODER_AUDIO) {
+		
+	}*/
+}
+
 struct obs_output_info janus_output = {
 	.id = "janus_output",
-	.flags = OBS_OUTPUT_AV,
 	.get_name = janus_output_getname,
 	.create = janus_output_create,
 	.destroy = janus_output_destroy,
 	.start = janus_output_start,
 	.stop = janus_output_stop,
+#ifdef USE_ENCODED_DATA
+	.flags = OBS_OUTPUT_AV | OBS_OUTPUT_ENCODED,
+	.encoded_video_codecs = "h264",
+	.encoded_audio_codecs = "opus",
+	.encoded_packet = receive_encoded_data,
+#else
+	.flags = OBS_OUTPUT_AV,
 	.raw_video = receive_video,
 	.raw_audio = receive_audio,
+#endif // USE_ENCODED_DATA
 	.get_total_bytes = janus_output_total_bytes,
 };

@@ -1,8 +1,11 @@
 #pragma once
 
+// include websocket_client.h file first
 #include "websocket_client.h"
+////////////////////////////////////////////////////////////////////////
 #include "rtc_client.h"
 #include "framegeneratorinterface.h"
+#include "videoencoderinterface.h"
 
 #include <util/platform.h>
 #include <util/threading.h>
@@ -13,7 +16,8 @@ typedef struct video_frame OBSVideoFrame;
 }
 
 namespace janus {
-class VideoFrameFeederImpl : public owt::base::VideoFrameFeeder {
+class VideoFrameFeederImpl : public owt::base::VideoFrameFeeder,
+			     public owt::base::VideoEncoderInterface {
 public:
 	VideoFrameFeederImpl();
 	~VideoFrameFeederImpl();
@@ -23,11 +27,21 @@ public:
 	// call this function from obs
 	void FeedVideoFrame(OBSVideoFrame *frame, int width, int height);
 
+	// encoded packet
+	virtual bool InitEncoderContext(owt::base::Resolution &resolution, uint32_t fps,
+			   uint32_t bitrate_kbps,
+			   owt::base::VideoCodec video_codec) override;
+	virtual bool EncodeOneFrame(std::vector<uint8_t> &buffer,
+				    bool key_frame) override;
+	virtual bool Release() override;
+	virtual owt::base::VideoEncoderInterface *Copy() override;
+
 private:
 	owt::base::VideoFrameReceiverInterface *frame_receiver_;
 };
 
-class JanusConnection : public signaling::WebsocketClientInterface, public rtc::RTCClientIceCandidateObserver {
+class JanusConnection : public signaling::WebsocketClientInterface,
+			public rtc::RTCClientIceCandidateObserver {
 public:
 	JanusConnection();
 	~JanusConnection();
@@ -38,7 +52,9 @@ public:
 	virtual void OnRecvMessage(const std::string &msg) override;
 
 	// RTCClient event callbacks
-	virtual void OnIceCandidateDiscoveried(std::string &id, rtc::RTCIceCandidate &candidate) override;
+	virtual void
+	OnIceCandidateDiscoveried(std::string &id,
+				  rtc::RTCIceCandidate &candidate) override;
 
 	// janus conncetion events
 	void Publish(const char *url, uint32_t id, const char *display,
