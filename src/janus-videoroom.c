@@ -64,8 +64,6 @@ bool janus_data_init(struct janus_data *data, struct janus_cfg *config)
 {
 	memset(data, 0, sizeof(struct janus_data));
 	data->config = *config;
-	data->num_audio_streams = config->audio_mix_count;
-	data->audio_tracks = config->audio_tracks;
 	if (!config->url || !*config->url)
 		return false;
 
@@ -91,22 +89,10 @@ static inline const char *get_string_or_null(obs_data_t *settings,
 	return value;
 }
 
-static int get_audio_mix_count(int audio_mix_mask)
-{
-	int mix_count = 0;
-	for (int i = 0; i < MAX_AUDIO_MIXES; i++) {
-		if ((audio_mix_mask & (1 << i)) != 0) {
-			mix_count++;
-		}
-	}
-
-	return mix_count;
-}
-
 static const char *janus_output_getname(void *unused)
 {
 	UNUSED_PARAMETER(unused);
-	return obs_module_text("JanusVideoRoom");
+	return obs_module_text("janus-videoroom output");
 }
 
 static void *janus_output_create(obs_data_t *settings, obs_output_t *output)
@@ -217,13 +203,12 @@ static bool try_connect(struct janus_output *output)
 	config.url = obs_data_get_string(settings, "url");
 	config.display = get_string_or_null(settings, "display");
 	config.room = (uint64_t)obs_data_get_int(settings, "room");
+	config.user_id = (uint32_t)obs_data_get_int(settings, "id");
 	config.pin = get_string_or_null(settings, "pin");
 
 	// a/v configs
 	config.width = (int)obs_output_get_width(output->output);
 	config.height = (int)obs_output_get_height(output->output);
-	config.audio_tracks = (int)obs_output_get_mixers(output->output);
-	config.audio_mix_count = get_audio_mix_count(config.audio_tracks);
 
 	// init struct `janus_data`
 	success = janus_data_init(&output->js_data, &config);
@@ -249,7 +234,7 @@ static bool try_connect(struct janus_output *output)
 
 	if (output->janus_conn != NULL) {
 		// start publishing...
-		Publish(output->janus_conn, config.url, 110, config.display,
+		Publish(output->janus_conn, config.url, config.user_id, config.display,
 			config.room, config.pin);
 	}
 

@@ -8,7 +8,10 @@ VideoFrameFeederImpl::VideoFrameFeederImpl()
 {
 }
 
-VideoFrameFeederImpl::~VideoFrameFeederImpl() {}
+VideoFrameFeederImpl::~VideoFrameFeederImpl()
+{
+	frame_receiver_ = nullptr;
+}
 
 void VideoFrameFeederImpl::FeedVideoFrame(OBSVideoFrame *frame, int width,
 					  int height)
@@ -35,7 +38,8 @@ JanusConnection::JanusConnection()
 	  room_(0),
 	  session_id_(0),
 	  handle_id_(0),
-	  id_(0)
+	  id_(0),
+	  joined_room_(false)
 {
 }
 
@@ -70,7 +74,11 @@ void JanusConnection::OnConnected()
 	CreateSession();
 }
 
-void JanusConnection::OnConnectionClosed(const std::string &reason) {}
+void JanusConnection::OnConnectionClosed(const std::string &reason)
+{
+	joined_room_ = false;
+	InvalidKeepaliveThread();
+}
 
 void JanusConnection::OnRecvMessage(const std::string &msg)
 {
@@ -84,11 +92,11 @@ void JanusConnection::OnRecvMessage(const std::string &msg)
 			session_id_ = session_id;
 			// get handle ID
 			CreateHandle();
+			// send keep-alive msg in every 20s
+			CreateKeepaliveThread();
 		} else if (transaction == "Attach" && janus == "success") {
 			uint64_t hdl_id = json["data"]["id"];
 			handle_id_ = hdl_id;
-			// send keep-alive msg in every 20s
-			CreateKeepaliveThread();
 			// publish media stream automatically
 			Publish(nullptr, id_, display_.c_str(), room_,
 				pin_.c_str());
@@ -96,6 +104,8 @@ void JanusConnection::OnRecvMessage(const std::string &msg)
 			// joined the room
 			CreateRTCClient();
 			CreateOffer();
+			// set join room state to `true`
+			joined_room_ = true;
 		} else if (transaction == "Configure" && janus == "event") {
 			// process configs & set remote offer
 			std::string sdp = json["jsep"]["sdp"];
@@ -107,6 +117,11 @@ void JanusConnection::OnRecvMessage(const std::string &msg)
 			// hangup from janus
 		}
 	}
+}
+
+void JanusConnection::OnIceCandidateDiscoveried(std::string &id, rtc::RTCIceCandidate &candidate)
+{
+	SendCandidate(candidate.sdp, candidate.sdp_mid, candidate.sdp_mline_index);
 }
 
 void JanusConnection::Publish(const char *url, uint32_t id, const char *display,
@@ -121,19 +136,24 @@ void JanusConnection::Publish(const char *url, uint32_t id, const char *display,
 		// make a connection first
 		Connect(url);
 	} else {
-		nlohmann::json payload = {{"janus", "message"},
-					  {"transaction", "JoinRoom"},
-					  {"handle_id", handle_id_},
-					  {"session_id", session_id_},
-					  {"body",
-					   {{"request", "join"},
-					    {"ptype", "publisher"},
-					    {"room", room},
-					    {"pin", pin},
-					    {"display", display},
-					    {"id", id}}}};
-		std::string msg = payload.dump();
-		ws_client_->SendMsg(msg);
+		if (!joined_room_) {
+			nlohmann::json payload = {{"janus", "message"},
+						  {"transaction", "JoinRoom"},
+						  {"handle_id", handle_id_},
+						  {"session_id", session_id_},
+						  {"body",
+						   {{"request", "join"},
+						    {"ptype", "publisher"},
+						    {"room", room},
+						    {"pin", pin},
+						    {"display", display},
+						    {"id", id}}}};
+			std::string msg = payload.dump();
+			ws_client_->SendMsg(msg);
+		} else {
+			CreateRTCClient();
+			CreateOffer();
+		}
 	}
 }
 
@@ -147,10 +167,12 @@ void JanusConnection::Unpublish()
 	std::string msg = payload.dump();
 	ws_client_->SendMsg(msg);
 
-	// deal with the keep-alive thread & stop the loop
-	session_id_ = 0;
-	handle_id_ = 0;
-	pthread_join(keeplive_thread_, NULL);
+	// destory RTCClient
+	DestoryRTCClient();
+	// release the `VideoFrameFeeder`
+	if (video_framer_) {
+		video_framer_ = nullptr;
+	}
 }
 
 void JanusConnection::CreateRTCClient()
@@ -317,6 +339,14 @@ int JanusConnection::CreateKeepaliveThread()
 	auto list = new std::list<void *>{ws_client_, &session_id_};
 	return pthread_create(&keeplive_thread_, NULL, StartSendingKeepalive,
 			      list);
+}
+
+void JanusConnection::InvalidKeepaliveThread()
+{
+	// deal with the keep-alive thread & stop the loop
+	session_id_ = 0;
+	handle_id_ = 0;
+	pthread_join(keeplive_thread_, NULL);
 }
 
 }

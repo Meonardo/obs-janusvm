@@ -37,6 +37,8 @@ typedef void(__stdcall *ErrorCallback)(std::string &error, void *params);
 
 typedef libwebrtc::RTCVideoRenderer<
 	libwebrtc::scoped_refptr<libwebrtc::RTCVideoFrame>> *RTCVideoRendererPtr;
+
+typedef std::unordered_map<std::string, std::string> ICEServer;
 // end of typedefs
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -81,13 +83,10 @@ public:
 
 class RTCClient : public libwebrtc::RTCPeerConnectionObserver {
 public:
-	explicit RTCClient(
-		std::string id,
-		libwebrtc::scoped_refptr<libwebrtc::RTCPeerConnectionFactory>
-			pcf,
-		const libwebrtc::RTCConfiguration &configuration,
-		libwebrtc::scoped_refptr<libwebrtc::RTCMediaConstraints>
-			constraints);
+	RTCClient(std::string id,
+		  libwebrtc::scoped_refptr<libwebrtc::RTCPeerConnectionFactory>
+			  pcf,
+		  std::vector<ICEServer> &ice_servers);
 	~RTCClient();
 
 	// ID
@@ -112,7 +111,8 @@ public:
 
 	// Media
 	bool ToggleMute(bool mute);
-	void CreateMediaSender(std::unique_ptr<owt::base::VideoFrameGeneratorInterface> video);
+	void CreateMediaSender(
+		std::unique_ptr<owt::base::VideoFrameGeneratorInterface> video);
 
 	// PC Observer & callback
 	void AddPeerconnectionEventsObserver(RTCClientConnectionObserver *cb);
@@ -153,6 +153,7 @@ public:
 		libwebrtc::scoped_refptr<libwebrtc::RTCRtpReceiver> receiver)
 		override;
 
+protected:
 private:
 	std::string id_;
 	libwebrtc::scoped_refptr<libwebrtc::RTCVideoTrack> local_video_track_;
@@ -160,21 +161,22 @@ private:
 	libwebrtc::scoped_refptr<libwebrtc::RTCVideoTrack> remote_video_track_;
 	libwebrtc::scoped_refptr<libwebrtc::RTCPeerConnectionFactory> pcf_;
 	libwebrtc::scoped_refptr<libwebrtc::RTCPeerConnection> pc_;
+	std::unique_ptr<libwebrtc::RTCConfiguration> rtc_config_;
 
 	// Observers
 	RTCClientConnectionObserver *events_cb_;
 	RTCClientIceCandidateObserver *ice_candidate_cb_;
 	RTCClientMediaTrackEventObserver *media_track_update_cb_;
+
+	void ApplyBitrateSettings();
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // static methods
 
 // Update RTC log level
-// 0 vebose
-// 1
 void UpdateRTCLogLevel(janus::rtc::RTCLogLevel level);
-// Enable intel media sdk hw acc for
+// Enable intel media sdk hw acc for encoding
 void SetVideoHardwareAccelerationEnabled(bool enable);
 // Create RTCClient
 RTCClient *CreateClient(

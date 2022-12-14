@@ -15,25 +15,14 @@ struct janus_cfg {
 	const char *url;
 	const char *display;
 	uint64_t room;
+	uint32_t user_id;
 	const char *pin;
-
-	int audio_mix_count;
-	int audio_tracks;
 
 	int width;
 	int height;
 };
 
 struct janus_data {
-	int64_t total_frames;
-	int frame_size;
-
-	uint64_t start_timestamp;
-
-	// audio info
-	int audio_tracks;
-	int num_audio_streams;
-
 	struct janus_cfg config;
 
 	bool initialized;
@@ -46,6 +35,7 @@ struct janus_output {
 	obs_output_t *output;
 
 	struct janus_data js_data;
+	// `JanusConnection` instance pointer
 	void *janus_conn;
 
 	bool connecting;

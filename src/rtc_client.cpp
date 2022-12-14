@@ -14,10 +14,8 @@ static scoped_refptr<RTCPeerConnectionFactory> g_pcf_ = nullptr;
 
 RTCClient::RTCClient(std::string id,
 		     scoped_refptr<RTCPeerConnectionFactory> pcf,
-		     const RTCConfiguration &configuration,
-		     scoped_refptr<RTCMediaConstraints> constraints)
+		     std::vector<ICEServer> &ice_servers)
 	: pcf_(pcf),
-	  pc_(pcf->Create(configuration, constraints)),
 	  local_video_track_(nullptr),
 	  remote_video_track_(nullptr),
 	  audio_track_(nullptr),
@@ -26,6 +24,18 @@ RTCClient::RTCClient(std::string id,
 	  id_(id),
 	  media_track_update_cb_(nullptr)
 {
+	const size_t l = ice_servers.size();
+
+	rtc_config_ = std::make_unique<RTCConfiguration>();
+	for (int i = 0; i < l; i++) {
+		auto &t = ice_servers[i];
+		IceServer server = {t["uri"], t["username"], t["passwd"]};
+		rtc_config_->ice_servers[i] = server;
+	}
+	// video bandwidth max value
+	rtc_config_->local_video_bandwidth = 3000;
+
+	pc_ = pcf->Create(*rtc_config_, RTCMediaConstraints::Create()),
 	pc_->RegisterRTCPeerConnectionObserver(this);
 }
 
@@ -248,6 +258,38 @@ void RTCClient::CreateMediaSender(
 	pc_->AddStream(stream);
 }
 
+void RTCClient::ApplyBitrateSettings()
+{
+	auto senders = pc_->senders();
+	for (int i = 0; i < senders.size(); i++) {
+		auto sender = senders[i];
+		auto sender_track = sender->track();
+		if (sender_track == nullptr)
+			return;
+		if (sender_track->kind().std_string() == "video") {
+			auto vec =
+				sender->parameters()->encodings().std_vector();
+			if (!vec.empty()) {
+				auto p = vec.front();
+				p->set_min_bitrate_bps(1000 * 1000 * 2);
+				p->set_max_bitrate_bps(1000 * 1000 * 4);
+			} else {
+				auto p1 = RTCRtpEncodingParameters::Create();
+				p1->set_min_bitrate_bps(1000 * 1000 * 2);
+				p1->set_max_bitrate_bps(1000 * 1000 * 4);
+				vec.push_back(p1);
+			}
+
+			auto p = sender->parameters();
+			p->set_encodings(vec);
+			bool success = sender->set_parameters(p);
+			blog(LOG_INFO, "Update RTCRTPEncodingParameter result: %d", success);
+			break;
+		}
+	}
+}
+
+
 void RTCClient::OnSignalingState(RTCSignalingState state)
 {
 	blog(LOG_INFO, "OnSignalingState: %d", state);
@@ -353,31 +395,17 @@ void SetVideoHardwareAccelerationEnabled(bool enable)
 }
 
 RTCClient *CreateClient(
-	std::vector<std::unordered_map<std::string, std::string>> &iceServers,
+	std::vector<ICEServer> &iceServers,
 	std::string id)
 {
 	if (g_pcf_ == nullptr) {
 		// Default log level is none
-		UpdateRTCLogLevel(kNone);
+		UpdateRTCLogLevel(kError);
 		SetVideoHardwareAccelerationEnabled(true);
 		IntializationPeerConnectionFactory();
 	}
 
-	const size_t l = iceServers.size();
-	if (l == 0) {
-		return nullptr;
-	}
-
-	RTCConfiguration configs;
-	for (int i = 0; i < l; i++) {
-		auto &t = iceServers[i];
-		IceServer server = {t["uri"], t["username"], t["passwd"]};
-		configs.ice_servers[i] = server;
-	}
-
-	scoped_refptr<RTCMediaConstraints> constraints =
-		RTCMediaConstraints::Create();
-	return new RTCClient(id, g_pcf_, configs, constraints);
+	return new RTCClient(id, g_pcf_, iceServers);
 }
 
 /////////////////////////////////////////////////////////////////////////////
