@@ -4,9 +4,9 @@
 extern "C" {
 #endif
 
-void *CreateConncetion()
+void *CreateConncetion(bool encoded)
 {
-	return new janus::JanusConnection();
+	return new janus::JanusConnection(encoded);
 }
 
 void DestoryConnection(void *conn)
@@ -37,6 +37,13 @@ void SendVideoFrame(void *conn, void *video_frame, int width, int height)
 	auto janus_conn = reinterpret_cast<janus::JanusConnection *>(conn);
 	auto frame = reinterpret_cast<OBSVideoFrame *>(video_frame);
 	janus_conn->SendVideoFrame(frame, width, height);
+}
+
+void SendVideoPacket(void *conn, void *packet, int width, int height)
+{
+	auto janus_conn = reinterpret_cast<janus::JanusConnection *>(conn);
+	auto pkt = reinterpret_cast<OBSVideoPacket *>(packet);
+	janus_conn->SendVideoPacket(pkt, width, height);
 }
 
 #ifdef __cplusplus

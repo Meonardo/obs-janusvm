@@ -56,8 +56,7 @@ os_cpu_usage_info_t *GetCpuUsageInfo()
 
 static void janus_output_full_stop(void *data);
 static void janus_deactivate(struct janus_output *output);
-static void *write_thread(void *data);
-static void *start_thread(void *data);
+static bool try_connect(struct janus_output *output);
 
 // data init & deinit
 bool janus_data_init(struct janus_data *data, struct janus_cfg *config)
@@ -102,13 +101,11 @@ static void *janus_output_create(obs_data_t *settings, obs_output_t *output)
 	data->janus_conn = NULL;
 
 	// here create janus connection instance
-	data->janus_conn = CreateConncetion();
-
-	if (os_event_init(&data->stop_event, OS_EVENT_TYPE_AUTO) != 0) {
-		os_event_destroy(data->stop_event);
-		bfree(data);
-		return NULL;
-	}
+#ifdef USE_ENCODED_DATA
+	data->janus_conn = CreateConncetion(true);
+#else
+	data->janus_conn = CreateConncetion(false);
+#endif // USE_ENCODED_DATA
 
 	UNUSED_PARAMETER(settings);
 	return data;
@@ -117,29 +114,33 @@ static void *janus_output_create(obs_data_t *settings, obs_output_t *output)
 static bool janus_output_start(void *data)
 {
 	struct janus_output *output = data;
-	int ret;
 
 	if (output->connecting)
 		return false;
+	output->connecting = true;
+
+	// get janus configs & connect to janus ws server
+	if (!try_connect(output)) {
+		obs_output_signal_stop(output->output,
+				       OBS_OUTPUT_CONNECT_FAILED);
+		output->connecting = false;
+		return false;
+	}
 
 	os_atomic_set_bool(&output->stopping, false);
 	output->audio_start_ts = 0;
 	output->video_start_ts = 0;
 	output->total_bytes = 0;
 
-	ret = pthread_create(&output->start_thread, NULL, start_thread, output);
+	output->connecting = false;
 
-	return (output->connecting = (ret == 0));
+	return true;
 }
 
 static void janus_output_destroy(void *data)
 {
 	struct janus_output *output = data;
-
 	if (output) {
-		if (output->connecting)
-			pthread_join(output->start_thread, NULL);
-
 		if (output->janus_conn != NULL) {
 			DestoryConnection(output->janus_conn);
 			output->janus_conn = NULL;
@@ -147,7 +148,6 @@ static void janus_output_destroy(void *data)
 
 		janus_output_full_stop(output);
 
-		os_event_destroy(output->stop_event);
 		bfree(data);
 	}
 }
@@ -223,11 +223,17 @@ static bool try_connect(struct janus_output *output)
 		return false;
 	}
 
-	// set the output is active!
-	output->active = true;
-
 	if (!obs_output_can_begin_data_capture(output->output, 0))
 		return false;
+
+#ifdef USE_ENCODED_DATA
+	if (!obs_output_initialize_encoders(output->output, OBS_OUTPUT_VIDEO)) {
+		return false;
+	}
+#endif
+
+	// set the output is active!
+	os_atomic_set_bool(&output->active, true);
 	// begin capture
 	obs_output_begin_data_capture(output->output, 0);
 	// will call `obs_output_end_data_capture()` in `janus_output_full_stop()`
@@ -239,24 +245,6 @@ static bool try_connect(struct janus_output *output)
 	}
 
 	return true;
-}
-
-static void *start_thread(void *data)
-{
-	struct janus_output *output = data;
-
-	// get janus configs & connect to janus ws server
-	if (!try_connect(output))
-		obs_output_signal_stop(output->output,
-				       OBS_OUTPUT_CONNECT_FAILED);
-
-	// set connecting
-	output->connecting = false;
-
-	// set thread name
-	os_set_thread_name("janus-output-thread");
-
-	return NULL;
 }
 
 // audio callback from obs
@@ -282,7 +270,12 @@ static void receive_encoded_data(void *data, struct encoder_packet *packet)
 	struct janus_output *output = data;
 
 	if (packet->type == OBS_ENCODER_VIDEO) {
-		
+		if (output->janus_conn != NULL) {
+			// send encoded packet to janus connection
+			SendVideoPacket(output->janus_conn, packet,
+				       output->js_data.config.width,
+				       output->js_data.config.height);
+		}
 	}
 
 	/*if (packet->type == OBS_ENCODER_AUDIO) {
@@ -298,12 +291,12 @@ struct obs_output_info janus_output = {
 	.start = janus_output_start,
 	.stop = janus_output_stop,
 #ifdef USE_ENCODED_DATA
-	.flags = OBS_OUTPUT_AV | OBS_OUTPUT_ENCODED,
+	.flags = OBS_OUTPUT_VIDEO | OBS_OUTPUT_ENCODED,
 	.encoded_video_codecs = "h264",
-	.encoded_audio_codecs = "opus",
+	//.encoded_audio_codecs = "opus",
 	.encoded_packet = receive_encoded_data,
 #else
-	.flags = OBS_OUTPUT_AV,
+	.flags = OBS_OUTPUT_VIDEO,
 	.raw_video = receive_video,
 	.raw_audio = receive_audio,
 #endif // USE_ENCODED_DATA

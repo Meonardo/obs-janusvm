@@ -12,38 +12,40 @@
 
 extern "C" {
 #include "media-io/video-frame.h"
+#include <obs.h>
 typedef struct video_frame OBSVideoFrame;
+typedef struct encoder_packet OBSVideoPacket;
 }
 
 namespace janus {
-class VideoFrameFeederImpl : public owt::base::VideoFrameFeeder,
-			     public owt::base::VideoEncoderInterface {
+// this class impl both `VideoFrameFeeder` and `VideoPacketFeeder`
+// it able to send raw or encoded video data to janus video-room
+class VideoFeederImpl : public owt::base::VideoFrameFeeder,
+			     public owt::base::VideoPacketFeeder {
 public:
-	VideoFrameFeederImpl();
-	~VideoFrameFeederImpl();
+	VideoFeederImpl();
+	~VideoFeederImpl();
 
-	// tell the framegenerator to store the frame's receiver
-	virtual void SetFrameReceiver(owt::base::VideoFrameReceiverInterface *receiver);
+	// tell the VideoFrameFeeder to store the frame's receiver(do NOT free this receiver)
+	virtual void SetFrameReceiver(owt::base::VideoFrameReceiverInterface *receiver) override;
 	// call this function from obs
 	void FeedVideoFrame(OBSVideoFrame *frame, int width, int height);
 
 	// encoded packet
-	virtual bool InitEncoderContext(owt::base::Resolution &resolution, uint32_t fps,
-			   uint32_t bitrate_kbps,
-			   owt::base::VideoCodec video_codec) override;
-	virtual bool EncodeOneFrame(std::vector<uint8_t> &buffer,
-				    bool key_frame) override;
-	virtual bool Release() override;
-	virtual owt::base::VideoEncoderInterface *Copy() override;
+	virtual void SetBufferReceiver(
+		owt::base::VideoPacketReceiverInterface *receiver) override;
+	// call this function from obs
+	void FeedVideoPacket(OBSVideoPacket *pkt, int width, int height);
 
 private:
 	owt::base::VideoFrameReceiverInterface *frame_receiver_;
+	owt::base::VideoPacketReceiverInterface *packet_receiver_;
 };
 
 class JanusConnection : public signaling::WebsocketClientInterface,
 			public rtc::RTCClientIceCandidateObserver {
 public:
-	JanusConnection();
+	JanusConnection(bool send_encoded_data);
 	~JanusConnection();
 
 	// websocket event callbacks
@@ -66,8 +68,10 @@ public:
 
 	// called from obs output
 	void SendVideoFrame(OBSVideoFrame *frame, int width, int height);
+	void SendVideoPacket(OBSVideoPacket *pkt, int width, int height);
 
 private:
+	bool use_encoded_data_;
 	uint32_t id_;
 	uint64_t room_;
 	std::string display_;
@@ -81,7 +85,7 @@ private:
 
 	signaling::WebsocketClient *ws_client_;
 	rtc::RTCClient *rtc_client_;
-	VideoFrameFeederImpl *video_framer_;
+	VideoFeederImpl *video_framer_;
 
 	// websocket events
 	void Connect(const char *url);

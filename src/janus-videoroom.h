@@ -44,12 +44,6 @@ struct janus_output {
 	volatile bool active;
 	volatile bool stopping;
 
-	// the thread of this module, created in `janus_output_start()`
-	// name: 'janus-output-thread'
-	pthread_t start_thread;
-	// stop event
-	os_event_t *stop_event;
-
 	uint64_t total_bytes;
 	uint64_t audio_start_ts;
 	uint64_t video_start_ts;

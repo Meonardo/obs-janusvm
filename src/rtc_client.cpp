@@ -249,10 +249,21 @@ bool RTCClient::ToggleMute(bool mute)
 void RTCClient::CreateMediaSender(
 	std::unique_ptr<owt::base::VideoFrameGeneratorInterface> video)
 {
-	string video_label("accrtc_video");
+	string video_label("obsrtc_video");
 	local_video_track_ = pcf_->CreateVideoTrack(std::move(video), video_label);
 
-	scoped_refptr<RTCMediaStream> stream = pcf_->CreateStream("obs-rtc");
+	scoped_refptr<RTCMediaStream> stream = pcf_->CreateStream("obs-rtc-raw");
+	if (local_video_track_)
+		stream->AddTrack(local_video_track_);
+	pc_->AddStream(stream);
+}
+
+void RTCClient::CreateMediaSender(owt::base::VideoEncoderInterface *encoder)
+{
+	string video_label("obsrtc_video");
+	local_video_track_ = pcf_->CreateVideoTrack(encoder, video_label);
+
+	scoped_refptr<RTCMediaStream> stream = pcf_->CreateStream("obs-rtc-encoded");
 	if (local_video_track_)
 		stream->AddTrack(local_video_track_);
 	pc_->AddStream(stream);
@@ -394,6 +405,15 @@ void SetVideoHardwareAccelerationEnabled(bool enable)
 	GlobalConfiguration::SetVideoHardwareAccelerationEnabled(enable);
 }
 
+void SetCustomizedVideoEncoderEnabled(bool enable)
+{
+	if (GlobalConfiguration::GetCustomizedVideoEncoderEnabled() ==
+	    enable)
+		return;
+	ResetPeerConnectionFactorySettings();
+	GlobalConfiguration::SetCustomizedVideoEncoderEnabled(enable);
+}
+
 RTCClient *CreateClient(
 	std::vector<ICEServer> &iceServers,
 	std::string id)
@@ -401,7 +421,9 @@ RTCClient *CreateClient(
 	if (g_pcf_ == nullptr) {
 		// Default log level is none
 		UpdateRTCLogLevel(kError);
-		SetVideoHardwareAccelerationEnabled(true);
+		// SetVideoHardwareAccelerationEnabled(true);
+		SetCustomizedVideoEncoderEnabled(true);
+
 		IntializationPeerConnectionFactory();
 	}
 

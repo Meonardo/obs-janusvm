@@ -111,8 +111,11 @@ public:
 
 	// Media
 	bool ToggleMute(bool mute);
+	// customized raw frame sender
 	void CreateMediaSender(
 		std::unique_ptr<owt::base::VideoFrameGeneratorInterface> video);
+	// customized encoded packet sender
+	void CreateMediaSender(owt::base::VideoEncoderInterface *encoder);
 
 	// PC Observer & callback
 	void AddPeerconnectionEventsObserver(RTCClientConnectionObserver *cb);
