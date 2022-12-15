@@ -246,11 +246,10 @@ bool RTCClient::ToggleMute(bool mute)
 	return audio_track_->set_enabled(!mute);
 }
 
-void RTCClient::CreateMediaSender(
-	std::unique_ptr<owt::base::VideoFrameGeneratorInterface> video)
+void RTCClient::CreateMediaSender(owt::base::VideoFrameGeneratorInterface* video)
 {
 	string video_label("obsrtc_video");
-	local_video_track_ = pcf_->CreateVideoTrack(std::move(video), video_label);
+	local_video_track_ = pcf_->CreateVideoTrack(video, video_label);
 
 	scoped_refptr<RTCMediaStream> stream = pcf_->CreateStream("obs-rtc-raw");
 	if (local_video_track_)
@@ -258,7 +257,8 @@ void RTCClient::CreateMediaSender(
 	pc_->AddStream(stream);
 }
 
-void RTCClient::CreateMediaSender(owt::base::VideoEncoderInterface *encoder)
+void RTCClient::CreateMediaSender(owt::base::VideoEncoderInterface *encoder,
+				  bool encoded)
 {
 	string video_label("obsrtc_video");
 	local_video_track_ = pcf_->CreateVideoTrack(encoder, video_label);
@@ -420,7 +420,7 @@ RTCClient *CreateClient(
 {
 	if (g_pcf_ == nullptr) {
 		// Default log level is none
-		UpdateRTCLogLevel(kError);
+		UpdateRTCLogLevel(kNone);
 		// SetVideoHardwareAccelerationEnabled(true);
 		SetCustomizedVideoEncoderEnabled(true);
 

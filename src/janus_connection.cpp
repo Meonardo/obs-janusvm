@@ -50,7 +50,7 @@ void VideoFeederImpl::FeedVideoPacket(OBSVideoPacket *pkt, int width,
 JanusConnection::JanusConnection(bool send_encoded_data)
 	: ws_client_(nullptr),
 	  rtc_client_(nullptr),
-	  video_framer_(nullptr),
+	  video_feeder_(nullptr),
 	  room_(0),
 	  session_id_(0),
 	  handle_id_(0),
@@ -187,8 +187,9 @@ void JanusConnection::Unpublish()
 	// destory RTCClient
 	DestoryRTCClient();
 	// release the `VideoFrameFeeder`
-	if (video_framer_) {
-		video_framer_ = nullptr;
+	if (video_feeder_) {
+		delete video_feeder_;
+		video_feeder_ = nullptr;
 	}
 }
 
@@ -227,13 +228,13 @@ rtc::RTCClient *JanusConnection::GetRTCClient() const
 void JanusConnection::SendVideoFrame(OBSVideoFrame *frame, int width,
 				     int height)
 {
-	video_framer_->FeedVideoFrame(frame, width, height);
+	video_feeder_->FeedVideoFrame(frame, width, height);
 }
 
 void JanusConnection::SendVideoPacket(OBSVideoPacket *pkt, int width,
 				      int height)
 {
-	video_framer_->FeedVideoPacket(pkt, width, height);
+	video_feeder_->FeedVideoPacket(pkt, width, height);
 }
 
 void JanusConnection::DestoryRTCClient()
@@ -267,8 +268,8 @@ void JanusConnection::CreateHandle()
 void JanusConnection::CreateOffer()
 {
 	// create video framer if necessary
-	if (video_framer_ == nullptr) {
-		video_framer_ = new VideoFeederImpl();
+	if (video_feeder_ == nullptr) {
+		video_feeder_ = new VideoFeederImpl();
 	}
 
 	if (rtc_client_ == nullptr)
@@ -276,10 +277,9 @@ void JanusConnection::CreateOffer()
 
 	// create media sender
 	if (use_encoded_data_) {
-		rtc_client_->CreateMediaSender(video_framer_);
+		rtc_client_->CreateMediaSender(video_feeder_, true);
 	} else {
-		rtc_client_->CreateMediaSender(
-			std::unique_ptr<VideoFeederImpl>(video_framer_));
+		rtc_client_->CreateMediaSender(video_feeder_);
 	}
 
 	// create offer

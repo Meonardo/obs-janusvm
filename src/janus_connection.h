@@ -85,7 +85,7 @@ private:
 
 	signaling::WebsocketClient *ws_client_;
 	rtc::RTCClient *rtc_client_;
-	VideoFeederImpl *video_framer_;
+	VideoFeederImpl *video_feeder_;
 
 	// websocket events
 	void Connect(const char *url);
