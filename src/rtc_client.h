@@ -23,7 +23,7 @@ struct RTCIceCandidate {
 
 enum RTCLogLevel { kVebose = 0, kDebug, kInfo, kError, kNone };
 
-} // namespace miracast::rtc
+} // namespace janus::rtc
 
 ////////////////////////////////////////////////////////////////////////////////
 // typedefs
@@ -170,6 +170,7 @@ private:
 	RTCClientIceCandidateObserver *ice_candidate_cb_;
 	RTCClientMediaTrackEventObserver *media_track_update_cb_;
 
+	// does not work, please set the local_video_bandwidth in `RTCConfiguration` before create `RTCClient`
 	void ApplyBitrateSettings();
 };
 
@@ -180,12 +181,13 @@ private:
 void UpdateRTCLogLevel(janus::rtc::RTCLogLevel level);
 // Enable intel media sdk hw acc for encoding
 void SetVideoHardwareAccelerationEnabled(bool enable);
+// Enable custom encoder for video
+void SetCustomizedVideoEncoderEnabled(bool enable);
 // Create RTCClient
-RTCClient *CreateClient(
-	std::vector<std::unordered_map<std::string, std::string>> &iceServers,
+RTCClient *CreateClient(std::vector<ICEServer> &iceServers,
 	std::string id);
 
 // end of static methods
 //////////////////////////////////////////////////////////////////////////////////////////
 
-} // namespace miracast::rtc
+} // namespace janus::rtc
