@@ -234,6 +234,8 @@ void JanusConnection::SendVideoFrame(OBSVideoFrame *frame, int width,
 void JanusConnection::SendVideoPacket(OBSVideoPacket *pkt, int width,
 				      int height)
 {
+	if (video_feeder_ == nullptr)
+		return;
 	video_feeder_->FeedVideoPacket(pkt, width, height);
 }
 
