@@ -33,7 +33,7 @@ RTCClient::RTCClient(std::string id,
 		rtc_config_->ice_servers[i] = server;
 	}
 	// video bandwidth max value
-	rtc_config_->local_video_bandwidth = 3000;
+	rtc_config_->local_video_bandwidth = 8000;
 
 	pc_ = pcf->Create(*rtc_config_, RTCMediaConstraints::Create()),
 	pc_->RegisterRTCPeerConnectionObserver(this);
