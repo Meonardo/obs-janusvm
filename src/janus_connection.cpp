@@ -228,6 +228,8 @@ rtc::RTCClient *JanusConnection::GetRTCClient() const
 void JanusConnection::SendVideoFrame(OBSVideoFrame *frame, int width,
 				     int height)
 {
+	if (video_feeder_ == nullptr)
+		return;
 	video_feeder_->FeedVideoFrame(frame, width, height);
 }
 

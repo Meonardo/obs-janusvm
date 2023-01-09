@@ -26,8 +26,6 @@ bool obs_module_load(void)
 {
 	// register output
 	obs_register_output(&janus_output);
-	// initialize the cpu stats
-	_cpuUsageInfo = os_cpu_usage_info_start();
 
 	blog(LOG_INFO, "[obs_module_load] Module loaded.");
 
@@ -296,7 +294,7 @@ struct obs_output_info janus_output = {
 	//.encoded_audio_codecs = "opus",
 	.encoded_packet = receive_encoded_data,
 #else
-	.flags = OBS_OUTPUT_VIDEO,
+	.flags = OBS_OUTPUT_AV,
 	.raw_video = receive_video,
 	.raw_audio = receive_audio,
 #endif // USE_ENCODED_DATA

@@ -27,13 +27,13 @@ enum RTCLogLevel { kVebose = 0, kDebug, kInfo, kError, kNone };
 
 ////////////////////////////////////////////////////////////////////////////////
 // typedefs
-typedef void(__stdcall *OnCreatedSdpCallback)(
+typedef void(*OnCreatedSdpCallback)(
 	janus::rtc::RTCSessionDescription &sdp, std::string &error,
 	void *params);
-typedef void(__stdcall *OnCreatedIceCandidateCallback)(
+typedef void(*OnCreatedIceCandidateCallback)(
 	janus::rtc::RTCIceCandidate &candidate, std::string &error,
 	void *params);
-typedef void(__stdcall *ErrorCallback)(std::string &error, void *params);
+typedef void(*ErrorCallback)(std::string &error, void *params);
 
 typedef libwebrtc::RTCVideoRenderer<
 	libwebrtc::scoped_refptr<libwebrtc::RTCVideoFrame>> *RTCVideoRendererPtr;

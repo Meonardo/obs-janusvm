@@ -7,17 +7,20 @@
 #define blog(level, msg, ...) \
 	blog(level, "[janus-videoroom] " msg, ##__VA_ARGS__)
 
-#define USE_ENCODED_DATA 1
-
-os_cpu_usage_info_t *GetCpuUsageInfo();
+// uncomment this to enable send encoded data to janus 
+//#define USE_ENCODED_DATA
 
 // janus configs
-// janus server Websocket URL, room number, display name & etc...
 struct janus_cfg {
+	// janus websocket server url
 	const char *url;
+	// the user's display name in the room
 	const char *display;
+	// the room number 
 	uint64_t room;
+	// the user id
 	uint32_t user_id;
+	// optional 
 	const char *pin;
 
 	int width;

@@ -421,8 +421,8 @@ RTCClient *CreateClient(
 	if (g_pcf_ == nullptr) {
 		// Default log level is none
 		UpdateRTCLogLevel(kNone);
-		// SetVideoHardwareAccelerationEnabled(true);
-		SetCustomizedVideoEncoderEnabled(true);
+		SetVideoHardwareAccelerationEnabled(true);
+		//SetCustomizedVideoEncoderEnabled(true);
 
 		IntializationPeerConnectionFactory();
 	}
