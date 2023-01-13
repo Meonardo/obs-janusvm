@@ -27,13 +27,12 @@ enum RTCLogLevel { kVebose = 0, kDebug, kInfo, kError, kNone };
 
 ////////////////////////////////////////////////////////////////////////////////
 // typedefs
-typedef void(*OnCreatedSdpCallback)(
-	janus::rtc::RTCSessionDescription &sdp, std::string &error,
-	void *params);
-typedef void(*OnCreatedIceCandidateCallback)(
+typedef void (*OnCreatedSdpCallback)(janus::rtc::RTCSessionDescription &sdp,
+				     std::string &error, void *params);
+typedef void (*OnCreatedIceCandidateCallback)(
 	janus::rtc::RTCIceCandidate &candidate, std::string &error,
 	void *params);
-typedef void(*ErrorCallback)(std::string &error, void *params);
+typedef void (*ErrorCallback)(std::string &error, void *params);
 
 typedef libwebrtc::RTCVideoRenderer<
 	libwebrtc::scoped_refptr<libwebrtc::RTCVideoFrame>> *RTCVideoRendererPtr;
@@ -73,6 +72,8 @@ public:
 	virtual void
 	OnIceConnectionState(std::string &id,
 			     libwebrtc::RTCIceConnectionState state) = 0;
+
+	virtual void OnRenegotiationNeeded(std::string &id) = 0;
 };
 
 class RTCClientMediaTrackEventObserver {
@@ -83,7 +84,7 @@ public:
 
 class RTCClient : public libwebrtc::RTCPeerConnectionObserver {
 public:
-	RTCClient(std::string id,
+	RTCClient(std::string &id,
 		  libwebrtc::scoped_refptr<libwebrtc::RTCPeerConnectionFactory>
 			  pcf,
 		  std::vector<ICEServer> &ice_servers);
@@ -112,9 +113,10 @@ public:
 	// Media
 	bool ToggleMute(bool mute);
 	// customized raw frame sender
-	void CreateMediaSender(owt::base::VideoFrameGeneratorInterface* video);
+	void CreateMediaSender(owt::base::VideoFrameGeneratorInterface *video);
 	// customized encoded packet sender
-	void CreateMediaSender(owt::base::VideoEncoderInterface *encoder, bool encoded);
+	void CreateMediaSender(owt::base::VideoEncoderInterface *encoder,
+			       bool encoded);
 
 	// PC Observer & callback
 	void AddPeerconnectionEventsObserver(RTCClientConnectionObserver *cb);
@@ -184,8 +186,12 @@ void SetVideoHardwareAccelerationEnabled(bool enable);
 // Enable custom encoder for video
 void SetCustomizedVideoEncoderEnabled(bool enable);
 // Create RTCClient
-RTCClient *CreateClient(std::vector<ICEServer> &iceServers,
-	std::string id);
+RTCClient *CreateClient(std::vector<ICEServer> &iceServers, std::string &id);
+// Enable or disable customized audio input(fake microphone),
+// this function must called before `CreateClient()`
+void SetCustomizedAudioInputEnabled(
+	bool enable,
+	std::shared_ptr<owt::base::AudioFrameGeneratorInterface> framer);
 
 // end of static methods
 //////////////////////////////////////////////////////////////////////////////////////////

@@ -43,8 +43,21 @@ void Unpublish(void *conn);
 /// <param name="height">video frame height</param>
 void SendVideoFrame(void *conn, void *video_frame, int width, int height);
 
-
+/// <summary>
+/// Send encoded video packet to janus connection
+/// </summary>
+/// <param name="conn">the `JanusConnection` instance ptr</param>
+/// <param name="packet">encoded video data</param>
+/// <param name="width">video frame width</param>
+/// <param name="height">video frame height</param>
 void SendVideoPacket(void *conn, void *packet, int width, int height);
+
+/// <summary>
+/// Send audio frame to janus connection
+/// </summary>
+/// <param name="conn">the `JanusConnection` instance ptr</param>
+/// <param name="audio_frame">audio frame from obs</param>
+void SendAudioFrame(void *conn, void *audio_frame);
 
 #ifdef __cplusplus
 }

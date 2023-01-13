@@ -45,6 +45,44 @@ void VideoFeederImpl::FeedVideoPacket(OBSVideoPacket *pkt, int width,
 	}
 }
 
+AudioFeederImpl::AudioFeederImpl() : frame_receiver_(nullptr)
+{
+	// get audio info from obs output
+	auto audio = obs_get_audio();
+	auto info = audio_output_get_info(audio);
+	channels_ = audio_output_get_channels(audio);
+	sample_rate_ = audio_output_get_sample_rate(audio);
+	audio_bytes_per_channel_ = get_audio_bytes_per_channel(info->format);
+}
+
+AudioFeederImpl::~AudioFeederImpl()
+{
+	frame_receiver_ = nullptr;
+}
+
+int AudioFeederImpl::GetSampleRate()
+{
+	return sample_rate_;
+}
+
+int AudioFeederImpl::GetChannelNumber()
+{
+	return channels_;
+}
+
+void AudioFeederImpl::SetAudioFrameReceiver(
+	owt::base::AudioFrameReceiverInterface *receiver)
+{
+	frame_receiver_ = receiver;
+}
+
+void AudioFeederImpl::FeedAudioFrame(OBSAudioFrame *frame) {
+	if (frame_receiver_ == nullptr)
+		return;
+
+	frame_receiver_->OnFrame(frame->data[0], frame->frames);
+}
+
 /////////////////////////////////////////////////////////////////////////////////
 
 JanusConnection::JanusConnection(bool send_encoded_data)
@@ -58,10 +96,17 @@ JanusConnection::JanusConnection(bool send_encoded_data)
 	  joined_room_(false),
 	  use_encoded_data_(send_encoded_data)
 {
+	// create customized audio input
+	audio_feeder_ = std::make_shared<AudioFeederImpl>();
+	rtc::SetCustomizedAudioInputEnabled(true, audio_feeder_);
 }
 
 JanusConnection::~JanusConnection()
 {
+	// destory customized audio input
+	rtc::SetCustomizedAudioInputEnabled(false, nullptr);
+	audio_feeder_ = nullptr;
+
 	Disconnect();
 	DestoryRTCClient();
 }
@@ -217,7 +262,8 @@ void JanusConnection::CreateRTCClient()
 		};
 		ice_servers.push_back(map);
 	}
-	rtc_client_ = rtc::CreateClient(ice_servers, "obs");
+	std::string id("obs");
+	rtc_client_ = rtc::CreateClient(ice_servers, id);
 }
 
 rtc::RTCClient *JanusConnection::GetRTCClient() const
@@ -239,6 +285,13 @@ void JanusConnection::SendVideoPacket(OBSVideoPacket *pkt, int width,
 	if (video_feeder_ == nullptr)
 		return;
 	video_feeder_->FeedVideoPacket(pkt, width, height);
+}
+
+void JanusConnection::SendAudioFrame(OBSAudioFrame *frame) {
+	if (audio_feeder_ == nullptr) {
+		return;
+	}
+	audio_feeder_->FeedAudioFrame(frame);
 }
 
 void JanusConnection::DestoryRTCClient()

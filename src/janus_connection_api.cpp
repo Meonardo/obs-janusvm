@@ -46,6 +46,13 @@ void SendVideoPacket(void *conn, void *packet, int width, int height)
 	janus_conn->SendVideoPacket(pkt, width, height);
 }
 
+void SendAudioFrame(void *conn, void *audio_frame)
+{
+	auto janus_conn = reinterpret_cast<janus::JanusConnection *>(conn);
+	auto frame = reinterpret_cast<OBSAudioFrame *>(audio_frame);
+	janus_conn->SendAudioFrame(frame);
+}
+
 #ifdef __cplusplus
 }
 #endif

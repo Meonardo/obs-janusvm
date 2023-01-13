@@ -248,8 +248,11 @@ static bool try_connect(struct janus_output *output)
 // audio callback from obs
 static void receive_audio(void *param, struct audio_data *frame)
 {
-	/*struct janus_output *output = param;
-	struct janus_data *data = &output->js_data;*/
+	struct janus_output *output = param;
+	if (output->janus_conn != NULL) {
+		// send audio frame to janus connection
+		SendAudioFrame(output->janus_conn, frame);
+	}
 }
 
 // video callback from obs

@@ -12,8 +12,10 @@
 
 extern "C" {
 #include "media-io/video-frame.h"
+#include "media-io/audio-io.h"
 #include <obs.h>
 typedef struct video_frame OBSVideoFrame;
+typedef struct audio_data OBSAudioFrame;
 typedef struct encoder_packet OBSVideoPacket;
 }
 
@@ -21,13 +23,14 @@ namespace janus {
 // this class impl both `VideoFrameFeeder` and `VideoPacketFeeder`
 // it able to send raw or encoded video data to janus video-room
 class VideoFeederImpl : public owt::base::VideoFrameFeeder,
-			     public owt::base::VideoPacketFeeder {
+			public owt::base::VideoPacketFeeder {
 public:
 	VideoFeederImpl();
 	~VideoFeederImpl();
 
 	// tell the VideoFrameFeeder to store the frame's receiver(do NOT free this receiver)
-	virtual void SetFrameReceiver(owt::base::VideoFrameReceiverInterface *receiver) override;
+	virtual void SetFrameReceiver(
+		owt::base::VideoFrameReceiverInterface *receiver) override;
 	// call this function from obs
 	void FeedVideoFrame(OBSVideoFrame *frame, int width, int height);
 
@@ -40,6 +43,29 @@ public:
 private:
 	owt::base::VideoFrameReceiverInterface *frame_receiver_;
 	owt::base::VideoPacketReceiverInterface *packet_receiver_;
+};
+
+class AudioFeederImpl : public owt::base::AudioFrameFeeder {
+public:
+	AudioFeederImpl();
+	~AudioFeederImpl();
+
+	/// Get sample rate for frames generated.
+	virtual int GetSampleRate() override;
+	/// Get numbers of channel for frames generated.
+	virtual int GetChannelNumber() override;
+	/// pass the receiver to whom will send audio frames
+	virtual void SetAudioFrameReceiver(
+		owt::base::AudioFrameReceiverInterface *receiver) override;
+
+	// call this function from obs
+	void FeedAudioFrame(OBSAudioFrame *frame);
+
+private:
+	owt::base::AudioFrameReceiverInterface *frame_receiver_;
+	size_t channels_;
+	size_t audio_bytes_per_channel_; // webrtc frame byte size: sizeof(int16_t) = 2
+	uint32_t sample_rate_;
 };
 
 class JanusConnection : public signaling::WebsocketClientInterface,
@@ -69,6 +95,7 @@ public:
 	// called from obs output
 	void SendVideoFrame(OBSVideoFrame *frame, int width, int height);
 	void SendVideoPacket(OBSVideoPacket *pkt, int width, int height);
+	void SendAudioFrame(OBSAudioFrame *frame);
 
 private:
 	bool use_encoded_data_;
@@ -86,6 +113,7 @@ private:
 	signaling::WebsocketClient *ws_client_;
 	rtc::RTCClient *rtc_client_;
 	VideoFeederImpl *video_feeder_;
+	std::shared_ptr<AudioFeederImpl> audio_feeder_;
 
 	// websocket events
 	void Connect(const char *url);

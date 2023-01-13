@@ -12,7 +12,7 @@ namespace janus::rtc {
 
 static scoped_refptr<RTCPeerConnectionFactory> g_pcf_ = nullptr;
 
-RTCClient::RTCClient(std::string id,
+RTCClient::RTCClient(std::string &id,
 		     scoped_refptr<RTCPeerConnectionFactory> pcf,
 		     std::vector<ICEServer> &ice_servers)
 	: pcf_(pcf),
@@ -64,14 +64,14 @@ void RTCClient::Close()
 	if (local_video_track_) {
 		auto streams = pc_->local_streams();
 		for (int i = 0; i < streams.size(); i++) {
-			auto stream = streams[i];
+			auto& stream = streams[i];
 			stream->RemoveTrack(local_video_track_);
 		}
 	}
 	if (remote_video_track_) {
 		auto streams = pc_->remote_streams();
 		for (int i = 0; i < streams.size(); i++) {
-			auto stream = streams[i];
+			auto& stream = streams[i];
 			stream->RemoveTrack(remote_video_track_);
 		}
 	}
@@ -231,7 +231,6 @@ void RTCClient::GetRemoteDescription(void *params,
 		});
 }
 
-// Candiate
 void RTCClient::AddCandidate(const char *mid, int mid_mline_index,
 			     const char *candidate)
 {
@@ -248,24 +247,41 @@ bool RTCClient::ToggleMute(bool mute)
 
 void RTCClient::CreateMediaSender(owt::base::VideoFrameGeneratorInterface* video)
 {
+	string audio_label("obsrtc_audio");
+	scoped_refptr<RTCAudioSource> audio_source =
+		pcf_->CreateAudioSource(audio_label);
+	audio_track_ =
+		pcf_->CreateAudioTrack(audio_source, audio_label);
+
 	string video_label("obsrtc_video");
 	local_video_track_ = pcf_->CreateVideoTrack(video, video_label);
 
 	scoped_refptr<RTCMediaStream> stream = pcf_->CreateStream("obs-rtc-raw");
-	if (local_video_track_)
+	if (local_video_track_ != nullptr)
 		stream->AddTrack(local_video_track_);
+	if (audio_track_ != nullptr) {
+		stream->AddTrack(audio_track_);
+	}
 	pc_->AddStream(stream);
 }
 
 void RTCClient::CreateMediaSender(owt::base::VideoEncoderInterface *encoder,
 				  bool encoded)
 {
+	string audio_label("obsrtc_audio");
+	scoped_refptr<RTCAudioSource> audio_source =
+		pcf_->CreateAudioSource(audio_label);
+	audio_track_ = pcf_->CreateAudioTrack(audio_source, audio_label);
+
 	string video_label("obsrtc_video");
 	local_video_track_ = pcf_->CreateVideoTrack(encoder, video_label);
 
 	scoped_refptr<RTCMediaStream> stream = pcf_->CreateStream("obs-rtc-encoded");
-	if (local_video_track_)
+	if (local_video_track_ != nullptr)
 		stream->AddTrack(local_video_track_);
+	if (audio_track_ != nullptr) {
+		stream->AddTrack(audio_track_);
+	}
 	pc_->AddStream(stream);
 }
 
@@ -273,7 +289,7 @@ void RTCClient::ApplyBitrateSettings()
 {
 	auto senders = pc_->senders();
 	for (int i = 0; i < senders.size(); i++) {
-		auto sender = senders[i];
+		auto& sender = senders[i];
 		auto sender_track = sender->track();
 		if (sender_track == nullptr)
 			return;
@@ -300,10 +316,88 @@ void RTCClient::ApplyBitrateSettings()
 	}
 }
 
+std::string RTCSignalingStateToString(RTCSignalingState state)
+{
+	switch (state) {
+	case libwebrtc::RTCSignalingStateStable:
+		return "Stable";
+	case libwebrtc::RTCSignalingStateHaveLocalOffer:
+		return "HaveLocalOffer";
+	case libwebrtc::RTCSignalingStateHaveRemoteOffer:
+		return "HaveRemoteOffer";
+	case libwebrtc::RTCSignalingStateHaveLocalPrAnswer:
+		return "HaveLocalPrAnswer";
+	case libwebrtc::RTCSignalingStateHaveRemotePrAnswer:
+		return "HaveRemotePrAnswer";
+	case libwebrtc::RTCSignalingStateClosed:
+		return "Closed";
+	default:
+		return "";
+	}
+}
+
+std::string RTCPeerConnectionStateToString(RTCPeerConnectionState state)
+{
+	switch (state) {
+	case libwebrtc::RTCPeerConnectionStateNew:
+		return "New";
+	case libwebrtc::RTCPeerConnectionStateConnecting:
+		return "Connecting";
+	case libwebrtc::RTCPeerConnectionStateConnected:
+		return "Connected";
+	case libwebrtc::RTCPeerConnectionStateDisconnected:
+		return "Disconnected";
+	case libwebrtc::RTCPeerConnectionStateFailed:
+		return "Failed";
+	case libwebrtc::RTCPeerConnectionStateClosed:
+		return "Closed";
+	default:
+		return "";
+	}
+}
+
+std::string RTCIceGatheringStateToString(RTCIceGatheringState state)
+{
+	switch (state) {
+	case libwebrtc::RTCIceGatheringStateNew:
+		return "New";
+	case libwebrtc::RTCIceGatheringStateGathering:
+		return "Gathering";
+	case libwebrtc::RTCIceGatheringStateComplete:
+		return "Complete";
+	default:
+		return "";
+	}
+}
+
+std::string RTCIceConnectionStateToString(RTCIceConnectionState state)
+{
+	switch (state) {
+	case libwebrtc::RTCIceConnectionStateNew:
+		return "New";
+	case libwebrtc::RTCIceConnectionStateChecking:
+		return "Checking";
+	case libwebrtc::RTCIceConnectionStateCompleted:
+		return "Completed";
+	case libwebrtc::RTCIceConnectionStateConnected:
+		return "Connected";
+	case libwebrtc::RTCIceConnectionStateFailed:
+		return "Failed";
+	case libwebrtc::RTCIceConnectionStateDisconnected:
+		return "Disconnected";
+	case libwebrtc::RTCIceConnectionStateClosed:
+		return "Closed";
+	case libwebrtc::RTCIceConnectionStateMax:
+		return "Max";
+	default:
+		return "";
+	}
+}
 
 void RTCClient::OnSignalingState(RTCSignalingState state)
 {
-	blog(LOG_INFO, "OnSignalingState: %d", state);
+	blog(LOG_DEBUG, "OnSignalingState: %s",
+	     RTCSignalingStateToString(state).c_str());
 	if (events_cb_ != nullptr) {
 		events_cb_->OnSignalingState(id_, state);
 	}
@@ -311,7 +405,8 @@ void RTCClient::OnSignalingState(RTCSignalingState state)
 
 void RTCClient::OnPeerConnectionState(RTCPeerConnectionState state)
 {
-	blog(LOG_INFO, "OnPeerConnectionState: %d", state);
+	blog(LOG_DEBUG, "OnPeerConnectionState: %s",
+	     RTCPeerConnectionStateToString(state).c_str());
 	if (events_cb_ != nullptr) {
 		events_cb_->OnPeerConnectionState(id_, state);
 	}
@@ -319,7 +414,8 @@ void RTCClient::OnPeerConnectionState(RTCPeerConnectionState state)
 
 void RTCClient::OnIceGatheringState(RTCIceGatheringState state)
 {
-	blog(LOG_INFO, "OnIceGatheringState: %d", state);
+	blog(LOG_DEBUG, "OnIceGatheringState: %s",
+	     RTCIceGatheringStateToString(state).c_str());
 	if (events_cb_ != nullptr) {
 		events_cb_->OnIceGatheringState(id_, state);
 	}
@@ -327,7 +423,8 @@ void RTCClient::OnIceGatheringState(RTCIceGatheringState state)
 
 void RTCClient::OnIceConnectionState(RTCIceConnectionState state)
 {
-	blog(LOG_INFO, "OnIceConnectionState: %d", state);
+	blog(LOG_DEBUG, "OnIceConnectionState: %s",
+	     RTCIceConnectionStateToString(state).c_str());
 	if (events_cb_ != nullptr) {
 		events_cb_->OnIceConnectionState(id_, state);
 	}
@@ -337,7 +434,7 @@ void RTCClient::OnIceCandidate(
 	scoped_refptr<libwebrtc::RTCIceCandidate> candidate)
 {
 	if (ice_candidate_cb_ != nullptr) {
-		RTCIceCandidate candidate_ = {
+		rtc::RTCIceCandidate candidate_ = {
 			candidate->candidate().std_string(),
 			candidate->sdp_mline_index(),
 			candidate->sdp_mid().std_string()};
@@ -347,32 +444,78 @@ void RTCClient::OnIceCandidate(
 
 void RTCClient::OnAddStream(scoped_refptr<RTCMediaStream> stream)
 {
-	if (stream->video_tracks().size() > 0) {
-		remote_video_track_ = stream->video_tracks()[0];
-	}
-	if (stream->audio_tracks().size() > 0) {
-		audio_track_ = stream->audio_tracks()[0];
-	}
-	if (media_track_update_cb_ != nullptr) {
-		media_track_update_cb_->OnMediaTrackChanged(id_, kVideo,
-							    kAdded);
+	blog(LOG_DEBUG, "stream added");
+}
+
+void RTCClient::OnRemoveStream(scoped_refptr<RTCMediaStream> stream)
+{
+	blog(LOG_DEBUG, "stream removed");
+}
+
+void RTCClient::OnRenegotiationNeeded()
+{
+	blog(LOG_DEBUG, "OnRenegotiationNeeded");
+	if (events_cb_ != nullptr) {
+		events_cb_->OnRenegotiationNeeded(id_);
 	}
 }
 
-void RTCClient::OnRemoveStream(scoped_refptr<RTCMediaStream> stream) {}
-
-void RTCClient::OnDataChannel(scoped_refptr<RTCDataChannel> data_channel) {}
-
-void RTCClient::OnRenegotiationNeeded() {}
-
-void RTCClient::OnTrack(scoped_refptr<RTCRtpTransceiver> transceiver) {}
+void RTCClient::OnTrack(scoped_refptr<RTCRtpTransceiver> transceiver)
+{
+	blog(LOG_DEBUG, "OnTrack");
+}
 
 void RTCClient::OnAddTrack(vector<scoped_refptr<RTCMediaStream>> streams,
 			   scoped_refptr<RTCRtpReceiver> receiver)
 {
+	if (streams.size() == 0)
+		return;
+
+	const auto &stream = streams[0];
+
+	auto media_type = receiver->track()->kind().c_string();
+	RTCMediaType type = kVideo;
+
+	if (strcmp(media_type, "audio") == 0) {
+		type = kAudio;
+		if (stream->audio_tracks().size() > 0) {
+			audio_track_ = stream->audio_tracks()[0];
+		}
+	} else {
+		if (stream->video_tracks().size() > 0) {
+			remote_video_track_ = nullptr;
+			remote_video_track_ = stream->video_tracks()[0];
+		}
+	}
+
+	if (media_track_update_cb_ != nullptr) {
+		media_track_update_cb_->OnMediaTrackChanged(id_, type, kAdded);
+	}
+
+	blog(LOG_DEBUG, "%s", type == kVideo ? "Video" : "Audio");
 }
 
-void RTCClient::OnRemoveTrack(scoped_refptr<RTCRtpReceiver> receiver) {}
+void RTCClient::OnRemoveTrack(scoped_refptr<RTCRtpReceiver> receiver)
+{
+	auto media_type = receiver->track()->kind().c_string();
+	RTCMediaType type = kVideo;
+
+	if (strcmp(media_type, "audio") == 0) {
+		type = kAudio;
+	}
+
+	if (media_track_update_cb_ != nullptr) {
+		media_track_update_cb_->OnMediaTrackChanged(id_, type,
+							    kRemoved);
+	}
+
+	blog(LOG_DEBUG, "%s", type == kVideo ? "Video" : "Audio");
+}
+
+void RTCClient::OnDataChannel(scoped_refptr<RTCDataChannel> data_channel)
+{
+	blog(LOG_DEBUG, "new DataChannel was created");
+}
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -416,7 +559,7 @@ void SetCustomizedVideoEncoderEnabled(bool enable)
 
 RTCClient *CreateClient(
 	std::vector<ICEServer> &iceServers,
-	std::string id)
+	std::string &id)
 {
 	if (g_pcf_ == nullptr) {
 		// Default log level is none
@@ -428,6 +571,19 @@ RTCClient *CreateClient(
 	}
 
 	return new RTCClient(id, g_pcf_, iceServers);
+}
+
+void SetCustomizedAudioInputEnabled(
+	bool enable,
+	std::shared_ptr<owt::base::AudioFrameGeneratorInterface> framer)
+{
+	bool changed = enable !=
+		       GlobalConfiguration::GetCustomizedAudioInputEnabled();
+	if (changed) {
+		// need to reset pcf in order to update `SetCustomizedAudioInputEnabled`.
+		ResetPeerConnectionFactorySettings();
+	}
+	GlobalConfiguration::SetCustomizedAudioInputEnabled(enable, framer);
 }
 
 /////////////////////////////////////////////////////////////////////////////
