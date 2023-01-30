@@ -45,29 +45,6 @@ private:
 	owt::base::VideoPacketReceiverInterface *packet_receiver_;
 };
 
-class AudioFeederImpl : public owt::base::AudioFrameFeeder {
-public:
-	AudioFeederImpl();
-	~AudioFeederImpl();
-
-	/// Get sample rate for frames generated.
-	virtual int GetSampleRate() override;
-	/// Get numbers of channel for frames generated.
-	virtual int GetChannelNumber() override;
-	/// pass the receiver to whom will send audio frames
-	virtual void SetAudioFrameReceiver(
-		owt::base::AudioFrameReceiverInterface *receiver) override;
-
-	// call this function from obs
-	void FeedAudioFrame(OBSAudioFrame *frame);
-
-private:
-	owt::base::AudioFrameReceiverInterface *frame_receiver_;
-	size_t channels_;
-	size_t audio_bytes_per_channel_; // webrtc frame byte size: sizeof(int16_t) = 2
-	uint32_t sample_rate_;
-};
-
 class JanusConnection : public signaling::WebsocketClientInterface,
 			public rtc::RTCClientIceCandidateObserver {
 public:
@@ -113,7 +90,10 @@ private:
 	signaling::WebsocketClient *ws_client_;
 	rtc::RTCClient *rtc_client_;
 	VideoFeederImpl *video_feeder_;
-	std::shared_ptr<AudioFeederImpl> audio_feeder_;
+
+	// audio input params
+	size_t channels_;
+	uint32_t sample_rate_;
 
 	// websocket events
 	void Connect(const char *url);

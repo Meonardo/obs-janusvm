@@ -117,6 +117,9 @@ public:
 	// customized encoded packet sender
 	void CreateMediaSender(owt::base::VideoEncoderInterface *encoder,
 			       bool encoded);
+	// send custom audio source  
+	void SendAudioData(uint8_t *data, int64_t timestamp, size_t frames,
+			   uint32_t sample_rate, size_t num_channels);
 
 	// PC Observer & callback
 	void AddPeerconnectionEventsObserver(RTCClientConnectionObserver *cb);
@@ -161,7 +164,8 @@ protected:
 private:
 	std::string id_;
 	libwebrtc::scoped_refptr<libwebrtc::RTCVideoTrack> local_video_track_;
-	libwebrtc::scoped_refptr<libwebrtc::RTCAudioTrack> audio_track_;
+	libwebrtc::scoped_refptr<libwebrtc::RTCAudioTrack> local_audio_track_;
+	libwebrtc::scoped_refptr<libwebrtc::RTCAudioSource> custom_audio_source_;
 	libwebrtc::scoped_refptr<libwebrtc::RTCVideoTrack> remote_video_track_;
 	libwebrtc::scoped_refptr<libwebrtc::RTCPeerConnectionFactory> pcf_;
 	libwebrtc::scoped_refptr<libwebrtc::RTCPeerConnection> pc_;
@@ -189,9 +193,7 @@ void SetCustomizedVideoEncoderEnabled(bool enable);
 RTCClient *CreateClient(std::vector<ICEServer> &iceServers, std::string &id);
 // Enable or disable customized audio input(fake microphone),
 // this function must called before `CreateClient()`
-void SetCustomizedAudioInputEnabled(
-	bool enable,
-	std::shared_ptr<owt::base::AudioFrameGeneratorInterface> framer);
+void SetCustomizedAudioInputEnabled(bool enable);
 
 // end of static methods
 //////////////////////////////////////////////////////////////////////////////////////////

@@ -14,7 +14,7 @@ VideoFeederImpl::~VideoFeederImpl()
 }
 
 void VideoFeederImpl::FeedVideoFrame(OBSVideoFrame *frame, int width,
-					  int height)
+				     int height)
 {
 	auto v_frame = libwebrtc::RTCVideoFrame::Create(
 		width, height, frame->data[0], frame->data[1]);
@@ -36,51 +36,13 @@ void VideoFeederImpl::SetBufferReceiver(
 }
 
 void VideoFeederImpl::FeedVideoPacket(OBSVideoPacket *pkt, int width,
-					 int height)
+				      int height)
 {
-	auto encoded_frame = libwebrtc::RTCVideoFrame::Create(pkt->data, pkt->size, pkt->keyframe,
-		width, height);
+	auto encoded_frame = libwebrtc::RTCVideoFrame::Create(
+		pkt->data, pkt->size, pkt->keyframe, width, height);
 	if (packet_receiver_ != nullptr) {
 		packet_receiver_->OnPacket(encoded_frame);
 	}
-}
-
-AudioFeederImpl::AudioFeederImpl() : frame_receiver_(nullptr)
-{
-	// get audio info from obs output
-	auto audio = obs_get_audio();
-	auto info = audio_output_get_info(audio);
-	channels_ = audio_output_get_channels(audio);
-	sample_rate_ = audio_output_get_sample_rate(audio);
-	audio_bytes_per_channel_ = get_audio_bytes_per_channel(info->format);
-}
-
-AudioFeederImpl::~AudioFeederImpl()
-{
-	frame_receiver_ = nullptr;
-}
-
-int AudioFeederImpl::GetSampleRate()
-{
-	return sample_rate_;
-}
-
-int AudioFeederImpl::GetChannelNumber()
-{
-	return channels_;
-}
-
-void AudioFeederImpl::SetAudioFrameReceiver(
-	owt::base::AudioFrameReceiverInterface *receiver)
-{
-	frame_receiver_ = receiver;
-}
-
-void AudioFeederImpl::FeedAudioFrame(OBSAudioFrame *frame) {
-	if (frame_receiver_ == nullptr)
-		return;
-
-	frame_receiver_->OnFrame(frame->data[0], frame->frames);
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -96,17 +58,17 @@ JanusConnection::JanusConnection(bool send_encoded_data)
 	  joined_room_(false),
 	  use_encoded_data_(send_encoded_data)
 {
-	// create customized audio input
-	audio_feeder_ = std::make_shared<AudioFeederImpl>();
-	rtc::SetCustomizedAudioInputEnabled(true, audio_feeder_);
+	// get audio info from obs output
+	auto audio = obs_get_audio();
+	auto info = audio_output_get_info(audio);
+	channels_ = audio_output_get_channels(audio);
+	sample_rate_ = audio_output_get_sample_rate(audio);
+	// use custom audio input
+	rtc::SetCustomizedAudioInputEnabled(true);
 }
 
 JanusConnection::~JanusConnection()
 {
-	// destory customized audio input
-	rtc::SetCustomizedAudioInputEnabled(false, nullptr);
-	audio_feeder_ = nullptr;
-
 	Disconnect();
 	DestoryRTCClient();
 }
@@ -181,9 +143,11 @@ void JanusConnection::OnRecvMessage(const std::string &msg)
 	}
 }
 
-void JanusConnection::OnIceCandidateDiscoveried(std::string &id, rtc::RTCIceCandidate &candidate)
+void JanusConnection::OnIceCandidateDiscoveried(std::string &id,
+						rtc::RTCIceCandidate &candidate)
 {
-	SendCandidate(candidate.sdp, candidate.sdp_mid, candidate.sdp_mline_index);
+	SendCandidate(candidate.sdp, candidate.sdp_mid,
+		      candidate.sdp_mline_index);
 }
 
 void JanusConnection::Publish(const char *url, uint32_t id, const char *display,
@@ -287,11 +251,13 @@ void JanusConnection::SendVideoPacket(OBSVideoPacket *pkt, int width,
 	video_feeder_->FeedVideoPacket(pkt, width, height);
 }
 
-void JanusConnection::SendAudioFrame(OBSAudioFrame *frame) {
-	if (audio_feeder_ == nullptr) {
+void JanusConnection::SendAudioFrame(OBSAudioFrame *frame)
+{
+	if (rtc_client_ == nullptr) {
 		return;
 	}
-	audio_feeder_->FeedAudioFrame(frame);
+	rtc_client_->SendAudioData(frame->data[0], frame->timestamp,
+				   frame->frames, sample_rate_, channels_);
 }
 
 void JanusConnection::DestoryRTCClient()

@@ -18,7 +18,8 @@ RTCClient::RTCClient(std::string &id,
 	: pcf_(pcf),
 	  local_video_track_(nullptr),
 	  remote_video_track_(nullptr),
-	  audio_track_(nullptr),
+	  custom_audio_source_(nullptr),
+	  local_audio_track_(nullptr),
 	  events_cb_(nullptr),
 	  ice_candidate_cb_(nullptr),
 	  id_(id),
@@ -48,6 +49,7 @@ RTCClient::~RTCClient()
 	local_video_track_ = nullptr;
 	remote_video_track_ = nullptr;
 	media_track_update_cb_ = nullptr;
+	custom_audio_source_ = nullptr;
 }
 
 std::string RTCClient::ID() const
@@ -239,19 +241,19 @@ void RTCClient::AddCandidate(const char *mid, int mid_mline_index,
 
 bool RTCClient::ToggleMute(bool mute)
 {
-	if (audio_track_ == nullptr)
+	if (local_audio_track_ == nullptr)
 		return false;
 
-	return audio_track_->set_enabled(!mute);
+	return local_audio_track_->set_enabled(!mute);
 }
 
 void RTCClient::CreateMediaSender(owt::base::VideoFrameGeneratorInterface* video)
 {
 	string audio_label("obsrtc_audio");
-	scoped_refptr<RTCAudioSource> audio_source =
-		pcf_->CreateAudioSource(audio_label);
-	audio_track_ =
-		pcf_->CreateAudioTrack(audio_source, audio_label);
+	custom_audio_source_ =
+		pcf_->CreateCustomAudioSource(audio_label);
+	local_audio_track_ =
+		pcf_->CreateCustomAudioTrack(custom_audio_source_, audio_label);
 
 	string video_label("obsrtc_video");
 	local_video_track_ = pcf_->CreateVideoTrack(video, video_label);
@@ -259,8 +261,8 @@ void RTCClient::CreateMediaSender(owt::base::VideoFrameGeneratorInterface* video
 	scoped_refptr<RTCMediaStream> stream = pcf_->CreateStream("obs-rtc-raw");
 	if (local_video_track_ != nullptr)
 		stream->AddTrack(local_video_track_);
-	if (audio_track_ != nullptr) {
-		stream->AddTrack(audio_track_);
+	if (local_audio_track_ != nullptr) {
+		stream->AddTrack(local_audio_track_);
 	}
 	pc_->AddStream(stream);
 }
@@ -269,9 +271,9 @@ void RTCClient::CreateMediaSender(owt::base::VideoEncoderInterface *encoder,
 				  bool encoded)
 {
 	string audio_label("obsrtc_audio");
-	scoped_refptr<RTCAudioSource> audio_source =
-		pcf_->CreateAudioSource(audio_label);
-	audio_track_ = pcf_->CreateAudioTrack(audio_source, audio_label);
+	custom_audio_source_ = pcf_->CreateCustomAudioSource(audio_label);
+	local_audio_track_ =
+		pcf_->CreateCustomAudioTrack(custom_audio_source_, audio_label);
 
 	string video_label("obsrtc_video");
 	local_video_track_ = pcf_->CreateVideoTrack(encoder, video_label);
@@ -279,10 +281,18 @@ void RTCClient::CreateMediaSender(owt::base::VideoEncoderInterface *encoder,
 	scoped_refptr<RTCMediaStream> stream = pcf_->CreateStream("obs-rtc-encoded");
 	if (local_video_track_ != nullptr)
 		stream->AddTrack(local_video_track_);
-	if (audio_track_ != nullptr) {
-		stream->AddTrack(audio_track_);
+	if (local_audio_track_ != nullptr) {
+		stream->AddTrack(local_audio_track_);
 	}
 	pc_->AddStream(stream);
+}
+
+void RTCClient::SendAudioData(uint8_t *data, int64_t timestamp, size_t frames,
+		   uint32_t sample_rate, size_t num_channels)
+{
+	if (custom_audio_source_ != nullptr) {
+		custom_audio_source_->OnAudioData(data, timestamp, frames, sample_rate, num_channels);
+	}
 }
 
 void RTCClient::ApplyBitrateSettings()
@@ -479,7 +489,7 @@ void RTCClient::OnAddTrack(vector<scoped_refptr<RTCMediaStream>> streams,
 	if (strcmp(media_type, "audio") == 0) {
 		type = kAudio;
 		if (stream->audio_tracks().size() > 0) {
-			audio_track_ = stream->audio_tracks()[0];
+			local_audio_track_ = stream->audio_tracks()[0];
 		}
 	} else {
 		if (stream->video_tracks().size() > 0) {
@@ -573,9 +583,7 @@ RTCClient *CreateClient(
 	return new RTCClient(id, g_pcf_, iceServers);
 }
 
-void SetCustomizedAudioInputEnabled(
-	bool enable,
-	std::shared_ptr<owt::base::AudioFrameGeneratorInterface> framer)
+void SetCustomizedAudioInputEnabled(bool enable)
 {
 	bool changed = enable !=
 		       GlobalConfiguration::GetCustomizedAudioInputEnabled();
@@ -583,7 +591,7 @@ void SetCustomizedAudioInputEnabled(
 		// need to reset pcf in order to update `SetCustomizedAudioInputEnabled`.
 		ResetPeerConnectionFactorySettings();
 	}
-	GlobalConfiguration::SetCustomizedAudioInputEnabled(enable, framer);
+	GlobalConfiguration::SetCustomizedAudioInputEnabled(enable);
 }
 
 /////////////////////////////////////////////////////////////////////////////
