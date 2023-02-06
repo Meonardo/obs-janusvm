@@ -1,5 +1,8 @@
 #include "websocket_client.h"
-#include "janus-videoroom.h"
+#include <util/base.h>
+
+#define blog(level, msg, ...) \
+	blog(level, "[janus-videoroom] " msg, ##__VA_ARGS__)
 
 namespace janus::signaling {
 WebsocketClient::WebsocketClient()

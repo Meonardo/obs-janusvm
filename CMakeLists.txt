@@ -7,6 +7,16 @@ if(NOT ENABLE_JANUS OR NOT ENABLE_UI)
   return()
 endif()
 
+find_package(
+  FFmpeg REQUIRED
+  COMPONENTS avcodec
+             avfilter
+             avdevice
+             avutil
+             swscale
+             avformat
+             swresample)
+
 # Submodule deps check
 if(NOT
    (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/deps/json/CMakeLists.txt
@@ -52,6 +62,13 @@ target_link_libraries(
   janus-videoroom
   PRIVATE OBS::libobs
           OBS::frontend-api
+          FFmpeg::avcodec
+          FFmpeg::avfilter
+          FFmpeg::avformat
+          FFmpeg::avdevice
+          FFmpeg::avutil
+          FFmpeg::swscale
+          FFmpeg::swresample
           "${CMAKE_CURRENT_SOURCE_DIR}/deps/libwebrtc/lib/$<CONFIG>/libwebrtc.dll.lib"
           nlohmann_json::nlohmann_json)
 

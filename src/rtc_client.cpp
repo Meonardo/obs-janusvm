@@ -4,7 +4,10 @@
 #include "rtc_desktop_device.h"
 #include "rtc_peerconnection_factory.h"
 
-#include "janus-videoroom.h"
+#include <util/base.h>
+
+#define blog(level, msg, ...) \
+	blog(level, "[janus-videoroom] " msg, ##__VA_ARGS__)
 
 using namespace libwebrtc;
 
