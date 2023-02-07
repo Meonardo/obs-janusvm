@@ -165,14 +165,14 @@ static void janus_output_stop(void *data, uint64_t ts)
 {
 	struct janus_output *output = data;
 
-	AVCodecContext *codec_context = output->js_data.audio_info.ctx;
-	AVFormatContext *format_context = output->js_data.audio_info.format_ctx;
-
-	// Write the trailer to the output file
-	if (av_write_trailer(format_context) < 0) {
-		blog(LOG_ERROR, "Could not write output file trailer");
-	}
-	cleanup(codec_context, format_context);
+	// encode audio test
+	//AVCodecContext *codec_context = output->js_data.audio_info.ctx;
+	//AVFormatContext *format_context = output->js_data.audio_info.format_ctx;
+	//// Write the trailer to the output file
+	//if (av_write_trailer(format_context) < 0) {
+	//	blog(LOG_ERROR, "Could not write output file trailer");
+	//}
+	//cleanup(codec_context, format_context);
 
 	// Unpublish
 	if (output->janus_conn != NULL) {
